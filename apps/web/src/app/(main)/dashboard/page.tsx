@@ -50,6 +50,15 @@ export default async function DashboardPage() {
             墓地区画の管理 (空き・契約・墓じまい)
           </p>
         </Link>
+        <Link
+          href="/kaikei"
+          className="block rounded border border-gray-200 bg-white p-6 hover:border-gray-400 hover:shadow-sm"
+        >
+          <h2 className="text-lg font-medium">会計</h2>
+          <p className="mt-1 text-sm text-gray-600">
+            護持会費・御布施・寄付・経費の入出金管理
+          </p>
+        </Link>
       </div>
 
       <div className="rounded border border-gray-200 bg-white p-6">

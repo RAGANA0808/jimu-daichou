@@ -11,6 +11,11 @@ import {
   GRAVE_PLOT_STATUS_LABELS,
   GRAVE_PLOT_TYPE_LABELS,
 } from '@/features/kukaku/types';
+import { listTransactionsByHousehold } from '@/features/kaikei/queries';
+import {
+  TRANSACTION_CATEGORY_LABELS,
+  TRANSACTION_DIRECTION_LABELS,
+} from '@/features/kaikei/types';
 
 function formatJaDate(d: Date): string {
   return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
@@ -43,13 +48,19 @@ export default async function HouseholdDetailPage({
   if (!household) {
     notFound();
   }
-  const [deathLedgerEntries, memorialServices, familyMembers, gravePlots] =
-    await Promise.all([
-      listDeathLedgerEntriesByHousehold(household.id),
-      listMemorialServicesByHousehold(household.id),
-      listLivingMembersByHousehold(household.id),
-      listGravePlotsByHousehold(household.id),
-    ]);
+  const [
+    deathLedgerEntries,
+    memorialServices,
+    familyMembers,
+    gravePlots,
+    transactions,
+  ] = await Promise.all([
+    listDeathLedgerEntriesByHousehold(household.id),
+    listMemorialServicesByHousehold(household.id),
+    listLivingMembersByHousehold(household.id),
+    listGravePlotsByHousehold(household.id),
+    listTransactionsByHousehold(household.id),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -352,6 +363,81 @@ export default async function HouseholdDetailPage({
                       {p.contractDate
                         ? `${p.contractDate.getUTCFullYear()}/${p.contractDate.getUTCMonth() + 1}/${p.contractDate.getUTCDate()}`
                         : <span className="text-gray-400">—</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div className="rounded border border-gray-200 bg-white p-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-medium">入出金履歴</h2>
+            <p className="mt-1 text-sm text-gray-600">
+              {transactions.length === 0
+                ? 'この世帯の入出金記録はまだありません。'
+                : `登録件数: ${transactions.length} 件 (新しい順)`}
+            </p>
+          </div>
+          <Link
+            href={`/kaikei/new?householdId=${household.id}`}
+            className="rounded bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-800"
+          >
+            + 入出金を登録
+          </Link>
+        </div>
+
+        {transactions.length > 0 && (
+          <div className="mt-5 overflow-hidden rounded border border-gray-200">
+            <table className="w-full divide-y divide-gray-200 text-sm">
+              <thead className="bg-gray-50 text-left text-xs uppercase tracking-wider text-gray-500">
+                <tr>
+                  <th className="px-4 py-2">日付</th>
+                  <th className="px-4 py-2">区分</th>
+                  <th className="px-4 py-2">カテゴリ</th>
+                  <th className="px-4 py-2 text-right">金額</th>
+                  <th className="px-4 py-2">支払方法</th>
+                  <th className="px-4 py-2 text-right">操作</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {transactions.map((t) => (
+                  <tr key={t.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-2 text-gray-700">
+                      <Link href={`/kaikei/${t.id}`} className="hover:underline">
+                        {`${t.paidAt.getUTCFullYear()}/${t.paidAt.getUTCMonth() + 1}/${t.paidAt.getUTCDate()}`}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-2 text-gray-700">
+                      <span
+                        className={`inline-block rounded px-2 py-0.5 text-xs ${
+                          t.direction === 'INCOME'
+                            ? 'bg-green-50 text-green-800'
+                            : 'bg-orange-50 text-orange-800'
+                        }`}
+                      >
+                        {TRANSACTION_DIRECTION_LABELS[t.direction]}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 text-gray-700">
+                      {TRANSACTION_CATEGORY_LABELS[t.category]}
+                    </td>
+                    <td className="px-4 py-2 text-right font-medium text-gray-900">
+                      {t.amount.toLocaleString('ja-JP')} 円
+                    </td>
+                    <td className="px-4 py-2 text-gray-700">
+                      {t.paymentMethod ?? <span className="text-gray-400">—</span>}
+                    </td>
+                    <td className="px-4 py-2 text-right">
+                      <Link
+                        href={`/kaikei/${t.id}/edit`}
+                        className="inline-block rounded border border-gray-300 px-3 py-1 text-xs text-gray-700 hover:bg-gray-100"
+                      >
+                        編集
+                      </Link>
                     </td>
                   </tr>
                 ))}

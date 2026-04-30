@@ -1,0 +1,356 @@
+// 寺務台帳 Prisma スキーマ (初版)
+//
+// 原則:
+// - 全テーブルに tenantId を必須化 (Tenant 自身を除く)
+// - 全テーブルに @@index([tenantId]) を付与
+// - RLS は別途 SQL マイグレーションで有効化する
+// - 過去帳 (DeathLedgerEntry) は deletedAt による論理削除のみ
+// - タイムゾーンは Asia/Tokyo 前提で保存
+//
+// 今後の各機能実装時に、このスキーマへ段階的にフィールドを追加する。
+// マイグレーションは `pnpm db:migrate:dev --name <変更内容>` で作成。
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// =========================================
+// テナント (寺院)
+// =========================================
+
+model Tenant {
+  id              String   @id @default(uuid()) @db.Uuid
+  name            String   // 寺院名 (例: "○○寺")
+  slug            String   @unique // URL スラッグ
+  headPriestName  String?  // 住職氏名 (案内状署名等で使用)
+
+  // Google Calendar 連携 (法要予定の自動同期用)
+  googleRefreshToken   String?
+  googleConnectedEmail String?
+  googleConnectedAt    DateTime?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  users              User[]
+  households         Household[]
+  persons            Person[]
+  deathLedgerEntries DeathLedgerEntry[]
+  memorialServices   MemorialService[]
+  gravePlots         GravePlot[]
+  gravePlotAreas     GravePlotArea[]
+  transactions       Transaction[]
+  interactionNotes   InteractionNote[]
+  documents          Document[]
+}
+
+// =========================================
+// ユーザー (寺族)
+// =========================================
+
+model User {
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @db.Uuid
+  email          String
+  displayName    String
+  role           UserRole @default(STAFF)
+  supabaseUserId String?  @unique // Supabase Auth との対応
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+}
+
+enum UserRole {
+  HEAD_PRIEST // 住職
+  PRIEST      // 僧侶
+  STAFF       // 事務員
+  READ_ONLY   // 閲覧のみ
+}
+
+// =========================================
+// 世帯 (檀信徒カルテの基本単位)
+// =========================================
+
+model Household {
+  id              String   @id @default(uuid()) @db.Uuid
+  tenantId        String   @db.Uuid
+  householderName String   // 施主名
+  nameKana        String   // かな (検索用)
+  postalCode      String?
+  address         String?
+  phone           String?
+  mobile          String?
+  email           String?
+  secondaryContact String? // 第 2 連絡先 (自由記述)
+  memo            String?  // 備考メモ
+  isActive        Boolean  @default(true) // 離檀した場合 false
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant           Tenant            @relation(fields: [tenantId], references: [id])
+  persons          Person[]
+  memorialServices MemorialService[]
+  gravePlots       GravePlot[]
+  transactions     Transaction[]
+  interactionNotes InteractionNote[]
+  documents        Document[]
+
+  @@index([tenantId])
+  @@index([tenantId, nameKana]) // かな検索
+  @@index([tenantId, phone])
+  @@index([tenantId, mobile])
+}
+
+// =========================================
+// 家族構成員 (存命・故人とも)
+// =========================================
+
+model Person {
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @db.Uuid
+  householdId    String   @db.Uuid
+  name           String
+  nameKana       String
+  familyRelation String?  // 続柄 (父・母・配偶者・長男 等)
+  birthDate      DateTime? @db.Date
+  isDeceased     Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  tenant            Tenant             @relation(fields: [tenantId], references: [id])
+  household         Household          @relation(fields: [householdId], references: [id])
+  deathLedgerEntry  DeathLedgerEntry?
+
+  @@index([tenantId])
+  @@index([householdId])
+  @@index([tenantId, nameKana])
+}
+
+// =========================================
+// 過去帳 (論理削除のみ)
+// =========================================
+
+model DeathLedgerEntry {
+  id             String    @id @default(uuid()) @db.Uuid
+  tenantId       String    @db.Uuid
+  personId       String    @unique @db.Uuid // 1 Person = 1 Entry
+  kaimyoName     String?   // 戒名
+  secularName    String    // 俗名
+  dateOfDeath    DateTime  @db.Date // 没年月日 (西暦マスタ)
+  dateOfDeathWareki String? // 和暦表記 (例: "令和6年3月15日")
+  ageAtDeath     Int?      // 行年
+  burialLocation String?   // 埋葬場所
+  memo           String?
+  deletedAt      DateTime? // 論理削除 (物理削除禁止)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  person Person @relation(fields: [personId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, dateOfDeath])
+}
+
+// =========================================
+// 法要・行事
+// =========================================
+
+model MemorialService {
+  id                  String                @id @default(uuid()) @db.Uuid
+  tenantId            String                @db.Uuid
+  householdId         String                @db.Uuid
+  serviceName         String                // 法要名 (例: "一周忌")
+  scheduledAt         DateTime
+  location            String?
+  attendeeCount       Int?
+  tobaCount           Int?                  // 塔婆本数
+  offeringAmount      Int?                  // 御布施額
+  preparationStatus   PreparationStatus     @default(TENTATIVE)
+  assignedUserId      String?               @db.Uuid
+  googleCalendarEventId String?             // Google Calendar 連携 ID
+  memo                String?
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+
+  tenant    Tenant    @relation(fields: [tenantId], references: [id])
+  household Household @relation(fields: [householdId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, scheduledAt])
+  @@index([householdId])
+}
+
+enum PreparationStatus {
+  TENTATIVE // 未定
+  CONFIRMED // 確定
+  DONE      // 完了
+  CANCELED  // 中止
+}
+
+// =========================================
+// お墓・区画
+// =========================================
+
+model GravePlot {
+  id           String         @id @default(uuid()) @db.Uuid
+  tenantId     String         @db.Uuid
+  householdId  String?        @db.Uuid // 契約世帯 (未契約の空き区画は null)
+  areaId       String?        @db.Uuid // 配置先エリア (null = 未配置 = パレット表示)
+  plotNumber   String         // 区画番号
+  plotType     GravePlotType
+  status       GravePlotStatus @default(AVAILABLE)
+  contractDate DateTime?      @db.Date
+  contractPlan String?        // 契約プラン名
+  positionX    Int?           // エリアキャンバス上の X 座標
+  positionY    Int?           // エリアキャンバス上の Y 座標
+  memo         String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  tenant    Tenant         @relation(fields: [tenantId], references: [id])
+  household Household?     @relation(fields: [householdId], references: [id])
+  area      GravePlotArea? @relation(fields: [areaId], references: [id])
+
+  @@unique([tenantId, plotNumber])
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([tenantId, areaId])
+}
+
+// =========================================
+// 墓地エリア (区画を地図上にグルーピングする単位)
+// =========================================
+
+model GravePlotArea {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @db.Uuid
+  name         String   // エリア名 (例: "東墓地", "永代供養区")
+  sortOrder    Int      @default(0) // タブの表示順
+  canvasWidth  Int      @default(1200)
+  canvasHeight Int      @default(800)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant     Tenant      @relation(fields: [tenantId], references: [id])
+  gravePlots GravePlot[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@index([tenantId, sortOrder])
+}
+
+enum GravePlotType {
+  INDIVIDUAL       // 個人墓
+  COUPLE           // 夫婦墓
+  FAMILY           // 家族墓
+  ETERNAL_MEMORIAL // 永代供養墓
+  OSSUARY          // 納骨堂
+}
+
+enum GravePlotStatus {
+  AVAILABLE   // 空き
+  IN_USE      // 使用中
+  RESERVED    // 予約済
+  CLOSED      // 墓じまい済
+}
+
+// =========================================
+// 会計 (入出金)
+// =========================================
+
+model Transaction {
+  id            String          @id @default(uuid()) @db.Uuid
+  tenantId      String          @db.Uuid
+  householdId   String?         @db.Uuid // 寺側の経費等では null
+  category      TransactionCategory
+  amount        Int             // 円単位
+  direction     TransactionDirection
+  paidAt        DateTime        @db.Date
+  paymentMethod String?         // 現金 / 振込 / その他
+  memo          String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id])
+  household Household? @relation(fields: [householdId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, paidAt])
+  @@index([householdId])
+}
+
+enum TransactionCategory {
+  MAINTENANCE_FEE // 護持会費
+  OFFERING        // 御布施
+  DONATION        // 寄付
+  EVENT_FEE       // 行事関連
+  EXPENSE         // 支出 (寺側の経費)
+  OTHER
+}
+
+enum TransactionDirection {
+  INCOME
+  EXPENSE
+}
+
+// =========================================
+// 伝言メモ (世帯とのやり取り記録)
+// =========================================
+
+model InteractionNote {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @db.Uuid
+  householdId String   @db.Uuid
+  authorId    String?  @db.Uuid // 記録した寺族
+  kind        InteractionKind @default(NOTE)
+  content     String   // 本文
+  occurredAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant    Tenant    @relation(fields: [tenantId], references: [id])
+  household Household @relation(fields: [householdId], references: [id])
+
+  @@index([tenantId])
+  @@index([householdId, occurredAt])
+}
+
+enum InteractionKind {
+  PHONE        // 電話
+  VISIT        // 訪問
+  EMAIL        // メール
+  CONVERSATION // 対面会話
+  NOTE         // その他メモ
+}
+
+// =========================================
+// 書類・画像 (Supabase Storage への参照)
+// =========================================
+
+model Document {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @db.Uuid
+  householdId String?  @db.Uuid
+  title       String
+  storagePath String   // Supabase Storage のオブジェクトパス
+  mimeType    String
+  byteSize    Int
+  createdAt   DateTime @default(now())
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id])
+  household Household? @relation(fields: [householdId], references: [id])
+
+  @@index([tenantId])
+  @@index([householdId])
+}

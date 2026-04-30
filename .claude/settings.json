@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "bash",
+            "command": "latest=$(ls -t docs/worklog/[0-9]*.md 2>/dev/null | head -1); if [ -n \"$latest\" ]; then name=$(basename \"$latest\"); echo \"# 前回の作業ログ ($name)\"; echo; cat \"$latest\"; else echo \"（作業ログはまだありません）\"; fi",
+            "statusMessage": "前回の作業ログを読み込み中"
+          }
+        ]
+      }
+    ]
+  }
+}

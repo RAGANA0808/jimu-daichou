@@ -71,10 +71,31 @@ export async function listHouseholdsForSelect(): Promise<
   Array<Pick<Household, 'id' | 'householderName' | 'nameKana'>>
 > {
   const tenantId = await requireCurrentTenantId();
+  // 区画 select でも離檀済 (isActive=false) は候補から除外。
+  // 「離檀した世帯と新規に区画契約することはない」前提。
+  // ただし編集ページで既存契約の世帯が離檀済の場合、ページ側で別途取得して補完する。
   return withTenant(tenantId, (tx) =>
     tx.household.findMany({
+      where: { isActive: true },
       select: { id: true, householderName: true, nameKana: true },
       orderBy: { nameKana: 'asc' },
+    }),
+  );
+}
+
+/**
+ * 編集画面用: 「既存契約の世帯が listHouseholdsForSelect に含まれない (離檀済)」場合の補完取得。
+ * 1 件分の最小情報だけ select する。
+ */
+export async function getHouseholdMinimalById(
+  householdId: string,
+): Promise<Pick<Household, 'id' | 'householderName' | 'nameKana'> | null> {
+  assertValidUuid(householdId, 'householdId');
+  const tenantId = await requireCurrentTenantId();
+  return withTenant(tenantId, (tx) =>
+    tx.household.findUnique({
+      where: { id: householdId },
+      select: { id: true, householderName: true, nameKana: true },
     }),
   );
 }

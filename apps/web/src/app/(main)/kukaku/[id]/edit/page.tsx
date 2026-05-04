@@ -5,6 +5,7 @@ import { listGravePlotAreasForSelect } from '@/features/kukaku/areas/queries';
 import { GravePlotForm } from '@/features/kukaku/GravePlotForm';
 import {
   getGravePlotById,
+  getHouseholdMinimalById,
   listHouseholdsForSelect,
 } from '@/features/kukaku/queries';
 
@@ -21,7 +22,7 @@ export default async function EditGravePlotPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [plot, householdOptions, areaOptions] = await Promise.all([
+  const [plot, baseHouseholdOptions, areaOptions] = await Promise.all([
     getGravePlotById(id),
     listHouseholdsForSelect(),
     listGravePlotAreasForSelect(),
@@ -29,6 +30,24 @@ export default async function EditGravePlotPage({
 
   if (!plot) {
     notFound();
+  }
+
+  // 既存の契約世帯が listHouseholdsForSelect に含まれない (離檀済 = isActive=false) 場合、
+  // 候補に出てこなくて選択が外れたように見えてしまうので補完する。
+  // 表示は「山田 太郎 (やまだたろう・離檀済)」として、住職に状態が分かるようにする。
+  const householdOptions = [...baseHouseholdOptions];
+  if (
+    plot.householdId &&
+    !householdOptions.some((h) => h.id === plot.householdId)
+  ) {
+    const fallback = await getHouseholdMinimalById(plot.householdId);
+    if (fallback) {
+      householdOptions.unshift({
+        id: fallback.id,
+        householderName: fallback.householderName,
+        nameKana: `${fallback.nameKana}・離檀済`,
+      });
+    }
   }
 
   return (

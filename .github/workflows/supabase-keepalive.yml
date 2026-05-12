@@ -1,0 +1,78 @@
+# Supabase Free プラン keep-alive
+#
+# 背景:
+#   Supabase の Free プランは「7 日間アクティビティなし」で自動的にプロジェクトが
+#   一時停止 (pause) される。アプリのアクセスがしばらく途絶える期間 (本番運用初期や
+#   開発中の停滞時) に発動すると、寺務台帳がダウンする → 住職が困る。
+#
+# 対策:
+#   月・木曜 (UTC 03:00 = JST 12:00) に Supabase REST API へ軽量な SELECT を投げて
+#   「アクティブ」と判定させる。週 2 回 / 最大間隔 4 日なので 7 日上限に十分な余裕。
+#
+# 動作:
+#   - SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY を GitHub Secrets から読み込む
+#   - Tenant テーブルに 1 行 SELECT (service_role は RLS をバイパスするので素通り)
+#   - HTTP 200 系なら成功、それ以外は Actions が失敗 → 住職にメール通知される
+#
+# 注意:
+#   - paused 状態の project に API call しても自動で unpause されない
+#     (Supabase 側の仕様)。初回は手動で Restore する必要がある。
+#   - cron は GitHub Actions の負荷状況で数十分〜数時間遅延することがあるが、
+#     週 2 回スケジュールしているので 7 日上限に対しては安全マージンあり。
+
+name: Supabase keep-alive
+
+on:
+  schedule:
+    # 月曜・木曜の UTC 03:00 (JST 12:00)
+    - cron: '0 3 * * 1,4'
+  # Actions タブから手動実行も可能 (動作確認・緊急時用)
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+
+    steps:
+      - name: Ping Supabase Tenant table
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          set -e
+
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "::error::GitHub Secrets SUPABASE_URL または SUPABASE_SERVICE_ROLE_KEY が未設定です。"
+            echo "  リポジトリの Settings > Secrets and variables > Actions で設定してください。"
+            exit 1
+          fi
+
+          # /rest/v1/Tenant?select=id&limit=1 を叩く。
+          # service_role は BYPASSRLS なのでテナントフィルタを設定しなくても素通りする。
+          # レスポンスボディは表示しない (ID が漏れる必要はない)。HTTP ステータスだけ確認。
+          http_status=$(curl -sS -o /dev/null -w "%{http_code}" \
+            -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+            -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+            "$SUPABASE_URL/rest/v1/Tenant?select=id&limit=1")
+
+          echo "HTTP $http_status"
+
+          case "$http_status" in
+            2*)
+              echo "✅ Supabase reachable — project はアクティブ"
+              ;;
+            503|504)
+              echo "::error::HTTP $http_status — Supabase project が paused または接続不能。"
+              echo "  ダッシュボードで Restore してください: https://supabase.com/dashboard/projects"
+              exit 1
+              ;;
+            401|403)
+              echo "::error::HTTP $http_status — 認証失敗。SUPABASE_SERVICE_ROLE_KEY を確認してください。"
+              exit 1
+              ;;
+            *)
+              echo "::error::HTTP $http_status — 想定外の応答。"
+              exit 1
+              ;;
+          esac

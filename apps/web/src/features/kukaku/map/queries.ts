@@ -12,6 +12,7 @@ export type MapPlot = Pick<
   | 'areaId'
   | 'positionX'
   | 'positionY'
+  | 'monumentName'
 > & {
   household: Pick<Household, 'id' | 'householderName'> | null;
 };
@@ -45,6 +46,7 @@ export async function getMapAreaData(
         areaId: true,
         positionX: true,
         positionY: true,
+        monumentName: true,
         household: { select: { id: true, householderName: true } },
       },
       orderBy: { plotNumber: 'asc' },

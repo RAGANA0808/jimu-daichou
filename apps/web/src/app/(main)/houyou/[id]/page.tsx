@@ -2,6 +2,14 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { PREPARATION_STATUS_LABELS } from '@/features/houyou/types';
 import { getMemorialServiceById } from '@/features/houyou/queries';
+import {
+  listTargetPersonCandidates,
+  listTobasByMemorialService,
+} from '@/features/toba/queries';
+import {
+  TobaManager,
+  type TobaListItem,
+} from '@/features/toba/TobaManager';
 
 function formatJstDateTime(d: Date): string {
   const y = d.getFullYear();
@@ -16,6 +24,17 @@ function formatJaDate(d: Date): string {
   return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
 }
 
+/** 終了予定の表示。開始と同日なら時刻のみ、別日なら日付込みで返す。 */
+function formatEndTime(scheduledAt: Date, endTime: Date): string {
+  const sameDay =
+    scheduledAt.getFullYear() === endTime.getFullYear() &&
+    scheduledAt.getMonth() === endTime.getMonth() &&
+    scheduledAt.getDate() === endTime.getDate();
+  const hh = String(endTime.getHours()).padStart(2, '0');
+  const mm = String(endTime.getMinutes()).padStart(2, '0');
+  return sameDay ? `${hh}:${mm}` : formatJstDateTime(endTime);
+}
+
 function DetailRow({
   label,
   value,
@@ -25,12 +44,12 @@ function DetailRow({
 }) {
   return (
     <>
-      <dt className="text-sm text-gray-500">{label}</dt>
-      <dd className="text-sm text-gray-900">
+      <dt className="text-sm text-muted-foreground">{label}</dt>
+      <dd className="text-sm text-foreground">
         {value && value.length > 0 ? (
           value
         ) : (
-          <span className="text-gray-400">—</span>
+          <span className="text-muted-foreground">—</span>
         )}
       </dd>
     </>
@@ -48,10 +67,31 @@ export default async function MemorialServiceDetailPage({
     notFound();
   }
 
+  const [tobaRecords, targetPersons] = await Promise.all([
+    listTobasByMemorialService(id),
+    listTargetPersonCandidates(service.household.id),
+  ]);
+
+  const tobas: TobaListItem[] = tobaRecords.map((t) => ({
+    id: t.id,
+    applicantName: t.applicantName,
+    targetPersonName: t.targetPerson?.name ?? null,
+    targetPersonId: t.targetPersonId,
+    count: t.count,
+    inscription: t.inscription,
+    offeringAmount: t.offeringAmount,
+    memo: t.memo,
+  }));
+
+  const targetPersonOptions = targetPersons.map((p) => ({
+    id: p.id,
+    name: p.name,
+  }));
+
   return (
     <div className="space-y-6">
       <div>
-        <nav className="text-sm text-gray-500">
+        <nav className="text-sm text-muted-foreground">
           <Link href="/dashboard" className="hover:underline">
             ダッシュボード
           </Link>
@@ -60,14 +100,14 @@ export default async function MemorialServiceDetailPage({
             法要
           </Link>
           <span className="mx-2">/</span>
-          <span className="text-gray-700">{service.serviceName}</span>
+          <span className="text-foreground">{service.serviceName}</span>
         </nav>
         <div className="mt-2 flex items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-serif tracking-wider">
+            <h1 className="text-2xl font-rounded tracking-wider">
               {service.serviceName}
             </h1>
-            <p className="mt-1 text-sm text-gray-600">
+            <p className="mt-1 text-sm text-muted-foreground">
               <Link
                 href={`/danshintoto/${service.household.id}`}
                 className="hover:underline"
@@ -79,19 +119,27 @@ export default async function MemorialServiceDetailPage({
           </div>
           <Link
             href={`/houyou/${service.id}/edit`}
-            className="rounded border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+            className="rounded border border-border px-4 py-2 text-sm text-foreground hover:bg-muted"
           >
             編集
           </Link>
         </div>
       </div>
 
-      <div className="rounded border border-gray-200 bg-white p-6">
+      <div className="rounded border border-border bg-surface p-6">
         <h2 className="text-lg font-medium">日時・場所</h2>
         <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-6 gap-y-3">
           <DetailRow
             label="予定日時"
             value={formatJstDateTime(service.scheduledAt)}
+          />
+          <DetailRow
+            label="終了予定"
+            value={
+              service.endTime
+                ? formatEndTime(service.scheduledAt, service.endTime)
+                : null
+            }
           />
           <DetailRow label="場所" value={service.location} />
           <DetailRow
@@ -101,7 +149,7 @@ export default async function MemorialServiceDetailPage({
         </dl>
       </div>
 
-      <div className="rounded border border-gray-200 bg-white p-6">
+      <div className="rounded border border-border bg-surface p-6">
         <h2 className="text-lg font-medium">詳細</h2>
         <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-6 gap-y-3">
           <DetailRow
@@ -113,7 +161,7 @@ export default async function MemorialServiceDetailPage({
             }
           />
           <DetailRow
-            label="塔婆本数"
+            label="塔婆本数 (概算)"
             value={
               service.tobaCount !== null ? `${service.tobaCount} 本` : null
             }
@@ -129,20 +177,26 @@ export default async function MemorialServiceDetailPage({
         </dl>
       </div>
 
-      <div className="rounded border border-gray-200 bg-white p-6">
+      <TobaManager
+        memorialServiceId={service.id}
+        tobas={tobas}
+        targetPersons={targetPersonOptions}
+      />
+
+      <div className="rounded border border-border bg-surface p-6">
         <h2 className="text-lg font-medium">備考</h2>
-        <div className="mt-3 whitespace-pre-wrap text-sm text-gray-900">
+        <div className="mt-3 whitespace-pre-wrap text-sm text-foreground">
           {service.memo && service.memo.length > 0 ? (
             service.memo
           ) : (
-            <span className="text-gray-400">—</span>
+            <span className="text-muted-foreground">—</span>
           )}
         </div>
       </div>
 
-      <div className="rounded border border-gray-200 bg-white p-6 text-sm">
-        <h2 className="text-base font-medium text-gray-900">Google Calendar</h2>
-        <p className="mt-2 text-gray-600">
+      <div className="rounded border border-border bg-surface p-6 text-sm">
+        <h2 className="text-base font-medium text-foreground">Google Calendar</h2>
+        <p className="mt-2 text-muted-foreground">
           {service.googleCalendarEventId ? (
             <>
               ✓ このイベントは Google カレンダーと同期されています。
@@ -153,7 +207,7 @@ export default async function MemorialServiceDetailPage({
             <>
               このイベントはまだ Google カレンダーに同期されていません。
               <br />
-              <Link href="/settings" className="text-gray-700 underline">
+              <Link href="/settings" className="text-foreground underline">
                 設定ページ
               </Link>
               で連携設定をご確認ください。連携済みで編集保存すると同期されます。
@@ -162,7 +216,7 @@ export default async function MemorialServiceDetailPage({
         </p>
       </div>
 
-      <div className="rounded border border-gray-200 bg-white p-6 text-sm text-gray-500">
+      <div className="rounded border border-border bg-surface p-6 text-sm text-muted-foreground">
         <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2">
           <dt>登録日</dt>
           <dd>{formatJaDate(service.createdAt)}</dd>

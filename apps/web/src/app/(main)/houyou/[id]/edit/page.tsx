@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { updateMemorialServiceAction } from '@/features/houyou/actions';
 import { MemorialServiceForm } from '@/features/houyou/MemorialServiceForm';
 import { getMemorialServiceById } from '@/features/houyou/queries';
+import { toOptimisticToken } from '@/lib/db';
 
 function toDatetimeLocalString(d: Date): string {
   const y = d.getFullYear();
@@ -27,7 +28,7 @@ export default async function EditMemorialServicePage({
   return (
     <div className="space-y-6">
       <div>
-        <nav className="text-sm text-gray-500">
+        <nav className="text-sm text-muted-foreground">
           <Link href="/dashboard" className="hover:underline">
             ダッシュボード
           </Link>
@@ -40,25 +41,27 @@ export default async function EditMemorialServicePage({
             {service.serviceName}
           </Link>
           <span className="mx-2">/</span>
-          <span className="text-gray-700">編集</span>
+          <span className="text-foreground">編集</span>
         </nav>
-        <h1 className="mt-2 text-2xl font-serif tracking-wider">
+        <h1 className="mt-2 text-2xl font-rounded tracking-wider">
           法要を編集する
         </h1>
-        <p className="mt-1 text-sm text-gray-600">
+        <p className="mt-1 text-sm text-muted-foreground">
           {service.household.householderName} 家 — {service.serviceName}
         </p>
       </div>
 
-      <div className="rounded border border-gray-200 bg-white p-6">
+      <div className="rounded border border-border bg-surface p-6">
         <MemorialServiceForm
           action={updateMemorialServiceAction}
           submitLabel="保存する"
           memorialServiceId={service.id}
           cancelHref={`/houyou/${service.id}`}
+          expectedUpdatedAt={toOptimisticToken(service.updatedAt)}
           initialValues={{
             serviceName: service.serviceName,
             scheduledAt: toDatetimeLocalString(service.scheduledAt),
+            endTime: service.endTime ? toDatetimeLocalString(service.endTime) : '',
             location: service.location ?? '',
             attendeeCount: service.attendeeCount?.toString() ?? '',
             tobaCount: service.tobaCount?.toString() ?? '',

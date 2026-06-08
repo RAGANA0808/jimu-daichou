@@ -46,10 +46,19 @@ export async function GET(request: NextRequest): Promise<Response> {
     );
   }
 
+  // N+1 解消: 該当世帯の住所をまとめて 1 クエリで取得する (旧: 世帯ごとに findUnique)。
+  const householdIds = Array.from(new Set(matches.map((m) => m.householdId)));
+  const households = await withTenant(tenantId, (tx) =>
+    tx.household.findMany({
+      where: { id: { in: householdIds } },
+      select: { id: true, postalCode: true, address: true },
+    }),
+  );
+  const addrById = new Map(households.map((h) => [h.id, h]));
+
   // 世帯ごとにグループ化 (同世帯に複数年忌あれば 1 通にまとめる)
   const byHousehold = new Map<string, NoticeLetterTarget>();
   for (const m of matches) {
-    const existing = byHousehold.get(m.householdId);
     const item = {
       secularName: m.secularName,
       kaimyoName: m.kaimyoName,
@@ -57,20 +66,13 @@ export async function GET(request: NextRequest): Promise<Response> {
       month: m.anniversary.month,
       day: m.anniversary.day,
     };
+    const existing = byHousehold.get(m.householdId);
     if (existing) {
       existing.anniversaries.push(item);
       continue;
     }
 
-    // 世帯の住所情報を取得する必要があるが、matches には載っていないので別途引く。
-    // 少数前提なので N+1 クエリは許容範囲 (Phase 1)。
-    const household = await withTenant(tenantId, (tx) =>
-      tx.household.findUnique({
-        where: { id: m.householdId },
-        select: { postalCode: true, address: true },
-      }),
-    );
-
+    const household = addrById.get(m.householdId);
     byHousehold.set(m.householdId, {
       householdId: m.householdId,
       householderName: m.householdName,

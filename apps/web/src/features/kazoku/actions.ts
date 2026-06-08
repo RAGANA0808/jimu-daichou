@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { requireCurrentTenantId } from '@/lib/auth';
+import { requireCapability } from '@/lib/auth';
 import { assertValidUuid, withTenant } from '@/lib/db';
 import type {
   FamilyMemberFieldName,
@@ -105,7 +105,7 @@ export async function createFamilyMemberAction(
     return { status: 'error', errors: v.errors, values };
   }
 
-  const tenantId = await requireCurrentTenantId();
+  const tenantId = (await requireCapability('create')).tenantId;
 
   await withTenant(tenantId, (tx) =>
     tx.person.create({
@@ -145,7 +145,7 @@ export async function updateFamilyMemberAction(
     return { status: 'error', errors: v.errors, values };
   }
 
-  const tenantId = await requireCurrentTenantId();
+  const tenantId = (await requireCapability('update')).tenantId;
 
   const householdId = await withTenant(tenantId, async (tx) => {
     const existing = await tx.person.findUnique({
@@ -190,7 +190,7 @@ export async function deleteFamilyMemberAction(
   }
   assertValidUuid(personId, 'personId');
 
-  const tenantId = await requireCurrentTenantId();
+  const tenantId = (await requireCapability('softDelete')).tenantId;
 
   const householdId = await withTenant(tenantId, async (tx) => {
     const existing = await tx.person.findUnique({

@@ -3,7 +3,7 @@
 import { Prisma } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { requireCurrentTenantId } from '@/lib/auth';
+import { requireCapability } from '@/lib/auth';
 import { assertValidUuid, withTenant } from '@/lib/db';
 import type {
   GravePlotAreaFieldName,
@@ -109,7 +109,7 @@ export async function createGravePlotAreaAction(
     return { status: 'error', errors: v.errors, values };
   }
 
-  const tenantId = await requireCurrentTenantId();
+  const tenantId = (await requireCapability('create')).tenantId;
 
   try {
     await withTenant(tenantId, (tx) =>
@@ -160,7 +160,7 @@ export async function updateGravePlotAreaAction(
     return { status: 'error', errors: v.errors, values };
   }
 
-  const tenantId = await requireCurrentTenantId();
+  const tenantId = (await requireCapability('update')).tenantId;
 
   try {
     await withTenant(tenantId, async (tx) => {
@@ -214,7 +214,7 @@ export async function deleteGravePlotAreaAction(
   if (id.length === 0) return;
   assertValidUuid(id, 'gravePlotAreaId');
 
-  const tenantId = await requireCurrentTenantId();
+  const tenantId = (await requireCapability('softDelete')).tenantId;
 
   await withTenant(tenantId, async (tx) => {
     await tx.gravePlot.updateMany({

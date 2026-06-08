@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useActionState } from 'react';
+import { VoiceTextarea } from '@/components/ui';
 import {
   initialMemorialServiceFormState,
   PREPARATION_STATUS_LABELS,
@@ -24,6 +25,8 @@ type Props = {
   householdId?: string;
   /** 編集時に hidden 送信する法要 ID */
   memorialServiceId?: string;
+  /** M-5 楽観ロックトークン (編集時のみ)。hidden input として送出される。 */
+  expectedUpdatedAt?: string;
 };
 
 type FieldProps = {
@@ -53,7 +56,7 @@ function TextField({
   const value = state.values?.[name] ?? defaultValue ?? '';
   return (
     <div className="space-y-1">
-      <label htmlFor={name} className="block text-sm font-medium text-gray-700">
+      <label htmlFor={name} className="block text-sm font-medium text-foreground">
         {label}
         {required && <span className="ml-1 text-red-600">*</span>}
       </label>
@@ -67,9 +70,9 @@ function TextField({
           placeholder={placeholder}
           inputMode={inputMode}
           aria-invalid={error ? 'true' : undefined}
-          className="block w-full rounded border border-gray-300 px-3 py-2 text-base focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
+          className="block w-full rounded border border-border px-3 py-2 text-base focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
         />
-        {suffix && <span className="text-sm text-gray-600">{suffix}</span>}
+        {suffix && <span className="text-sm text-muted-foreground">{suffix}</span>}
       </div>
       {error && <p className="text-sm text-red-700">{error}</p>}
     </div>
@@ -91,16 +94,16 @@ function TextareaField({
   const value = state.values?.[name] ?? defaultValue ?? '';
   return (
     <div className="space-y-1">
-      <label htmlFor={name} className="block text-sm font-medium text-gray-700">
+      <label htmlFor={name} className="block text-sm font-medium text-foreground">
         {label}
       </label>
-      <textarea
+      <VoiceTextarea
         id={name}
         name={name}
         rows={3}
         defaultValue={value}
         aria-invalid={error ? 'true' : undefined}
-        className="block w-full rounded border border-gray-300 px-3 py-2 text-base focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
+        voiceFieldLabel="備考メモ"
       />
       {error && <p className="text-sm text-red-700">{error}</p>}
     </div>
@@ -120,7 +123,7 @@ function PreparationStatusField({
     <div className="space-y-1">
       <label
         htmlFor="preparationStatus"
-        className="block text-sm font-medium text-gray-700"
+        className="block text-sm font-medium text-foreground"
       >
         準備状況
       </label>
@@ -129,7 +132,7 @@ function PreparationStatusField({
         name="preparationStatus"
         defaultValue={value}
         aria-invalid={error ? 'true' : undefined}
-        className="block w-full rounded border border-gray-300 px-3 py-2 text-base focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
+        className="block w-full rounded border border-border px-3 py-2 text-base focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
       >
         {PREPARATION_STATUS_ORDER.map((s) => (
           <option key={s} value={s}>
@@ -149,6 +152,7 @@ export function MemorialServiceForm({
   initialValues,
   householdId,
   memorialServiceId,
+  expectedUpdatedAt,
 }: Props) {
   const [state, formAction, isPending] = useActionState(
     action,
@@ -168,6 +172,19 @@ export function MemorialServiceForm({
           value={memorialServiceId}
         />
       )}
+      {expectedUpdatedAt && (
+        <input
+          type="hidden"
+          name="expectedUpdatedAt"
+          value={expectedUpdatedAt}
+        />
+      )}
+
+      {state.formError && (
+        <p className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800">
+          {state.formError}
+        </p>
+      )}
 
       <TextField
         name="serviceName"
@@ -185,6 +202,18 @@ export function MemorialServiceForm({
         state={state}
         defaultValue={iv.scheduledAt}
       />
+      <div className="space-y-1">
+        <TextField
+          name="endTime"
+          label="終了予定時刻"
+          type="datetime-local"
+          state={state}
+          defaultValue={iv.endTime}
+        />
+        <p className="text-xs text-muted-foreground">
+          空欄の場合は、カレンダー連携時に約 1 時間で登録します。
+        </p>
+      </div>
       <TextField
         name="location"
         label="場所"
@@ -237,13 +266,13 @@ export function MemorialServiceForm({
         <button
           type="submit"
           disabled={isPending}
-          className="rounded bg-gray-900 px-4 py-2 text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-400"
+          className="inline-flex min-h-touch items-center rounded bg-brand px-4 py-2 font-medium text-brand-foreground transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isPending ? '保存中…' : submitLabel}
         </button>
         <Link
           href={cancelHref}
-          className="rounded border border-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-100"
+          className="rounded border border-border px-4 py-2 text-foreground hover:bg-muted"
         >
           キャンセル
         </Link>

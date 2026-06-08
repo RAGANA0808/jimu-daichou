@@ -3,8 +3,15 @@
 import type { PreparationStatus } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { requireCurrentTenantId } from '@/lib/auth';
-import { assertValidUuid, withTenant } from '@/lib/db';
+import { requireCapability } from '@/lib/auth';
+import { recordAudit } from '@/lib/audit';
+import { decryptSecret } from '@/lib/crypto';
+import {
+  assertNotStale,
+  assertValidUuid,
+  isStaleError,
+  withTenant,
+} from '@/lib/db';
 import {
   createCalendarEvent,
   deleteCalendarEvent,
@@ -32,6 +39,7 @@ function extractValues(formData: FormData): MemorialServiceValues {
   return {
     serviceName: readField(formData, 'serviceName'),
     scheduledAt: readField(formData, 'scheduledAt'),
+    endTime: readField(formData, 'endTime'),
     location: readField(formData, 'location'),
     attendeeCount: readField(formData, 'attendeeCount'),
     tobaCount: readField(formData, 'tobaCount'),
@@ -97,6 +105,7 @@ function parseIntegerInRange(
 function validate(values: MemorialServiceValues): {
   errors: NonNullable<MemorialServiceFormState['errors']>;
   parsedScheduledAt: ParsedScheduledAt | null;
+  endTime: Date | null;
   attendeeCount: number | null;
   tobaCount: number | null;
   offeringAmount: number | null;
@@ -117,6 +126,22 @@ function validate(values: MemorialServiceValues): {
     parsedScheduledAt = parseScheduledAt(values.scheduledAt);
     if (parsedScheduledAt === null) {
       errors.scheduledAt = '日時の形式が正しくありません。';
+    }
+  }
+
+  // 終了予定時刻 (N-6)。任意。形式は scheduledAt と同じ datetime-local。
+  let endTime: Date | null = null;
+  if (values.endTime.length > 0) {
+    const parsedEnd = parseScheduledAt(values.endTime);
+    if (parsedEnd === null) {
+      errors.endTime = '日時の形式が正しくありません。';
+    } else if (
+      parsedScheduledAt !== null &&
+      parsedEnd.date.getTime() <= parsedScheduledAt.date.getTime()
+    ) {
+      errors.endTime = '終了時刻は開始時刻より後にしてください。';
+    } else {
+      endTime = parsedEnd.date;
     }
   }
 
@@ -163,6 +188,7 @@ function validate(values: MemorialServiceValues): {
   return {
     errors,
     parsedScheduledAt,
+    endTime,
     attendeeCount,
     tobaCount,
     offeringAmount,
@@ -179,6 +205,7 @@ type EventSourceData = {
   tobaCount: number | null;
   offeringAmount: number | null;
   scheduledAt: Date;
+  endTime: Date | null;
 };
 
 function getDetailUrl(serviceId: string): string | null {
@@ -211,7 +238,8 @@ function buildCalendarEventData(
     description: lines.join('\n'),
     location: src.location,
     startAt: src.scheduledAt,
-    endAt: new Date(src.scheduledAt.getTime() + 60 * 60 * 1000), // デフォルト 1 時間
+    // 終了時刻があれば採用、無ければ従来どおり既定 1 時間継続 (N-6)。
+    endAt: src.endTime ?? new Date(src.scheduledAt.getTime() + 60 * 60 * 1000),
     detailUrl,
   };
 }
@@ -287,7 +315,8 @@ export async function createMemorialServiceAction(
     return { status: 'error', errors: v.errors, values };
   }
 
-  const tenantId = await requireCurrentTenantId();
+  const user = await requireCapability('create');
+  const tenantId = user.tenantId;
 
   const { serviceId, refreshToken, householderName } = await withTenant(
     tenantId,
@@ -298,6 +327,7 @@ export async function createMemorialServiceAction(
           householdId,
           serviceName: values.serviceName,
           scheduledAt: parsedScheduledAt.date,
+          endTime: v.endTime,
           location: nullIfBlank(values.location),
           attendeeCount: v.attendeeCount,
           tobaCount: v.tobaCount,
@@ -317,9 +347,19 @@ export async function createMemorialServiceAction(
           select: { householderName: true },
         }),
       ]);
+      await recordAudit(tx, tenantId, {
+        actorId: user.id,
+        action: 'CREATE',
+        entityType: 'MemorialService',
+        entityId: service.id,
+        summary: '法要を新規登録',
+      });
       return {
         serviceId: service.id,
-        refreshToken: tenant?.googleRefreshToken ?? null,
+        // P-6: 保存値は暗号化されている可能性があるため復号して使う (平文は素通し)。
+        refreshToken: tenant?.googleRefreshToken
+          ? decryptSecret(tenant.googleRefreshToken) || null
+          : null,
         householderName: household?.householderName ?? '',
       };
     },
@@ -341,6 +381,7 @@ export async function createMemorialServiceAction(
         tobaCount: v.tobaCount,
         offeringAmount: v.offeringAmount,
         scheduledAt: parsedScheduledAt.date,
+        endTime: v.endTime,
       },
       serviceId,
     ),
@@ -375,22 +416,40 @@ export async function updateMemorialServiceAction(
     return { status: 'error', errors: v.errors, values };
   }
 
-  const tenantId = await requireCurrentTenantId();
+  // M-5: 楽観ロックトークン (epoch ms 文字列)。空なら検証をスキップ (後方互換)。
+  const expectedUpdatedAt = readField(formData, 'expectedUpdatedAt');
 
-  const { householdId, existingEventId, refreshToken, householderName } =
-    await withTenant(tenantId, async (tx) => {
+  const user = await requireCapability('update');
+  const tenantId = user.tenantId;
+
+  let updated: {
+    householdId: string;
+    existingEventId: string | null;
+    refreshToken: string | null;
+    householderName: string;
+  };
+  try {
+    updated = await withTenant(tenantId, async (tx) => {
       const existing = await tx.memorialService.findUnique({
         where: { id },
-        select: { householdId: true, googleCalendarEventId: true },
+        select: {
+          householdId: true,
+          googleCalendarEventId: true,
+          updatedAt: true,
+        },
       });
       if (!existing) {
         throw new Error('対象の法要が見つかりませんでした。');
+      }
+      if (expectedUpdatedAt.length > 0) {
+        assertNotStale(expectedUpdatedAt, existing.updatedAt);
       }
       await tx.memorialService.update({
         where: { id },
         data: {
           serviceName: values.serviceName,
           scheduledAt: parsedScheduledAt.date,
+          endTime: v.endTime,
           location: nullIfBlank(values.location),
           attendeeCount: v.attendeeCount,
           tobaCount: v.tobaCount,
@@ -409,30 +468,52 @@ export async function updateMemorialServiceAction(
           select: { householderName: true },
         }),
       ]);
+      await recordAudit(tx, tenantId, {
+        actorId: user.id,
+        action: 'UPDATE',
+        entityType: 'MemorialService',
+        entityId: id,
+        summary: '法要を編集',
+      });
       return {
         householdId: existing.householdId,
         existingEventId: existing.googleCalendarEventId,
-        refreshToken: tenant?.googleRefreshToken ?? null,
+        // P-6: 保存値は暗号化されている可能性があるため復号して使う (平文は素通し)。
+        refreshToken: tenant?.googleRefreshToken
+          ? decryptSecret(tenant.googleRefreshToken) || null
+          : null,
         householderName: household?.householderName ?? '',
       };
     });
+  } catch (e) {
+    if (isStaleError(e)) {
+      return {
+        status: 'error',
+        values,
+        formError:
+          '他の方がこの内容を更新されました。最新の内容を読み込み直してください。',
+      };
+    }
+    throw e;
+  }
 
   await syncToCalendar(
     tenantId,
     id,
-    refreshToken,
-    existingEventId,
+    updated.refreshToken,
+    updated.existingEventId,
     v.preparationStatus,
     buildCalendarEventData(
       {
         serviceName: values.serviceName,
-        householderName,
+        householderName: updated.householderName,
         location: nullIfBlank(values.location),
         memo: nullIfBlank(values.memo),
         attendeeCount: v.attendeeCount,
         tobaCount: v.tobaCount,
         offeringAmount: v.offeringAmount,
         scheduledAt: parsedScheduledAt.date,
+        endTime: v.endTime,
       },
       id,
     ),
@@ -440,6 +521,6 @@ export async function updateMemorialServiceAction(
 
   revalidatePath('/houyou');
   revalidatePath(`/houyou/${id}`);
-  revalidatePath(`/danshintoto/${householdId}`);
+  revalidatePath(`/danshintoto/${updated.householdId}`);
   redirect(`/houyou/${id}`);
 }

@@ -1,5 +1,20 @@
 import Link from 'next/link';
-import { findAnniversariesForYear } from '@/features/nenki/queries';
+import {
+  Button,
+  EmptyState,
+  PageHeader,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui';
+import {
+  findAnniversariesForYear,
+  sortAnniversaries,
+  type NenkiSortKey,
+} from '@/features/nenki/queries';
 
 function parseYearParam(raw: string | undefined): number {
   const now = new Date().getFullYear();
@@ -12,10 +27,11 @@ function parseYearParam(raw: string | undefined): number {
   return n;
 }
 
-function formatSchedule(
-  month: number | null,
-  day: number | null,
-): string {
+function parseSortParam(raw: string | undefined): NenkiSortKey {
+  return raw === 'kaimyo' ? 'kaimyo' : 'schedule';
+}
+
+function formatSchedule(month: number | null, day: number | null): string {
   if (month === null || day === null) return '— (月日不明)';
   return `${month}月${day}日`;
 }
@@ -23,130 +39,193 @@ function formatSchedule(
 export default async function NenkiPage({
   searchParams,
 }: {
-  searchParams: Promise<{ year?: string }>;
+  searchParams: Promise<{ year?: string; sort?: string }>;
 }) {
   const sp = await searchParams;
   const targetYear = parseYearParam(sp.year);
+  const sortKey = parseSortParam(sp.sort);
   const currentYear = new Date().getFullYear();
 
-  const matches = await findAnniversariesForYear(targetYear);
+  const unsorted = await findAnniversariesForYear(targetYear);
+  const matches = sortAnniversaries(unsorted, sortKey);
+  const householdCount = new Set(matches.map((m) => m.householdId)).size;
 
   return (
     <div className="space-y-6">
-      <div>
-        <nav className="text-sm text-gray-500">
-          <Link href="/dashboard" className="hover:underline">
-            ダッシュボード
-          </Link>
-          <span className="mx-2">/</span>
-          <span className="text-gray-700">年忌表</span>
-        </nav>
-        <div className="mt-2 flex items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-serif tracking-wider">
-              年忌表 {targetYear} 年
-            </h1>
-            <p className="mt-1 text-sm text-gray-600">
-              この年に年忌を迎える故人の一覧です。離檀された世帯は除いています。
-            </p>
-          </div>
-          {matches.length > 0 && (
-            <a
-              href={`/api/nenki/pdf?year=${targetYear}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="rounded bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-800"
-            >
-              案内状 PDF を生成 ({new Set(matches.map((m) => m.householdId)).size} 世帯)
-            </a>
-          )}
-        </div>
-      </div>
+      <PageHeader
+        title={`年忌表 ${targetYear} 年`}
+        description="この年に年忌を迎える故人の一覧です。離檀された世帯・弔い上げ済みは除いています。"
+        breadcrumbs={[
+          { label: 'ダッシュボード', href: '/dashboard' },
+          { label: '年忌表' },
+        ]}
+        actions={
+          matches.length > 0 ? (
+            <Link href={`/hasso/new?year=${targetYear}`}>
+              <Button>案内を出す（{householdCount} 世帯）</Button>
+            </Link>
+          ) : undefined
+        }
+      />
 
-      <div className="flex items-center gap-2 text-sm">
-        <Link
-          href={`/nenki?year=${targetYear - 1}`}
-          className="rounded border border-gray-300 px-3 py-1 text-gray-700 hover:bg-gray-100"
-        >
-          ← {targetYear - 1} 年
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <Link href={`/nenki?year=${targetYear - 1}&sort=${sortKey}`}>
+          <Button variant="secondary" size="sm">
+            ← {targetYear - 1} 年
+          </Button>
         </Link>
         {targetYear !== currentYear && (
-          <Link
-            href="/nenki"
-            className="rounded border border-gray-300 px-3 py-1 text-gray-700 hover:bg-gray-100"
-          >
-            今年 ({currentYear})
+          <Link href={`/nenki?sort=${sortKey}`}>
+            <Button variant="secondary" size="sm">
+              今年 ({currentYear})
+            </Button>
           </Link>
         )}
-        <Link
-          href={`/nenki?year=${targetYear + 1}`}
-          className="rounded border border-gray-300 px-3 py-1 text-gray-700 hover:bg-gray-100"
-        >
-          {targetYear + 1} 年 →
+        <Link href={`/nenki?year=${targetYear + 1}&sort=${sortKey}`}>
+          <Button variant="secondary" size="sm">
+            {targetYear + 1} 年 →
+          </Button>
         </Link>
       </div>
 
-      {matches.length === 0 ? (
-        <div className="rounded border border-dashed border-gray-300 bg-white p-10 text-center">
-          <p className="text-gray-600">
-            {targetYear} 年に年忌を迎える故人はいません。
-          </p>
-        </div>
-      ) : (
-        <div className="overflow-hidden rounded border border-gray-200 bg-white">
-          <table className="w-full divide-y divide-gray-200 text-sm">
-            <thead className="bg-gray-50 text-left text-xs uppercase tracking-wider text-gray-500">
-              <tr>
-                <th className="px-4 py-3">回忌</th>
-                <th className="px-4 py-3">予定日</th>
-                <th className="px-4 py-3">世帯 (施主)</th>
-                <th className="px-4 py-3">俗名</th>
-                <th className="px-4 py-3">戒名</th>
-                <th className="px-4 py-3">命日</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {matches.map((m) => (
-                <tr key={m.entryId} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-medium text-gray-900">
-                    {m.anniversary.name}
-                  </td>
-                  <td className="px-4 py-3 text-gray-700">
-                    {formatSchedule(
-                      m.anniversary.month,
-                      m.anniversary.day,
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-gray-700">
-                    <Link
-                      href={`/danshintoto/${m.householdId}`}
-                      className="hover:underline"
-                    >
-                      {m.householdName}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3 text-gray-900">
-                    <Link
-                      href={`/danshintoto/${m.householdId}/kakochou/${m.entryId}`}
-                      className="hover:underline"
-                    >
-                      {m.secularName}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3 text-gray-700">
-                    {m.kaimyoName ?? <span className="text-gray-400">—</span>}
-                  </td>
-                  <td className="px-4 py-3 text-gray-500">
-                    {m.deathDate.year}/{m.deathDate.month}/{m.deathDate.day}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {matches.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+          <div
+            className="inline-flex items-center gap-1"
+            role="group"
+            aria-label="並び順"
+          >
+            <span className="mr-1 text-muted-foreground">並び順:</span>
+            <Link href={`/nenki?year=${targetYear}&sort=schedule`}>
+              <Button
+                variant={sortKey === 'schedule' ? 'primary' : 'secondary'}
+                size="sm"
+              >
+                予定日順
+              </Button>
+            </Link>
+            <Link href={`/nenki?year=${targetYear}&sort=kaimyo`}>
+              <Button
+                variant={sortKey === 'kaimyo' ? 'primary' : 'secondary'}
+                size="sm"
+              >
+                戒名順
+              </Button>
+            </Link>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <a href={`/api/nenki/csv?year=${targetYear}&sort=${sortKey}`}>
+              <Button variant="secondary" size="sm">
+                CSV を書き出す（{sortKey === 'kaimyo' ? '戒名順' : '予定日順'}）
+              </Button>
+            </a>
+          </div>
         </div>
       )}
 
-      <p className="text-xs text-gray-500">
+      {matches.length === 0 ? (
+        <EmptyState
+          title={`${targetYear} 年に年忌を迎える故人はいません`}
+          description="前後の年もご確認ください。"
+        />
+      ) : (
+        <>
+          {/* PC: テーブル */}
+          <div className="hidden md:block">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>回忌</TableHead>
+                  <TableHead>予定日</TableHead>
+                  <TableHead>世帯 (施主)</TableHead>
+                  <TableHead>俗名</TableHead>
+                  <TableHead>戒名</TableHead>
+                  <TableHead>命日</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {matches.map((m) => (
+                  <TableRow key={m.entryId}>
+                    <TableCell className="font-medium">
+                      {m.anniversary.name}
+                    </TableCell>
+                    <TableCell>
+                      {formatSchedule(m.anniversary.month, m.anniversary.day)}
+                    </TableCell>
+                    <TableCell>
+                      <Link
+                        href={`/danshintoto/${m.householdId}`}
+                        className="text-info hover:underline"
+                      >
+                        {m.householdName}
+                      </Link>
+                    </TableCell>
+                    <TableCell>
+                      <Link
+                        href={`/danshintoto/${m.householdId}/kakochou/${m.entryId}`}
+                        className="text-info hover:underline"
+                      >
+                        {m.secularName}
+                      </Link>
+                    </TableCell>
+                    <TableCell>
+                      {m.kaimyoName ?? (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {m.deathDate.year}/{m.deathDate.month ?? '—'}/
+                      {m.deathDate.day ?? '—'}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+
+          {/* スマホ: カード */}
+          <ul className="space-y-3 md:hidden">
+            {matches.map((m) => (
+              <li
+                key={m.entryId}
+                className="rounded-lg border border-border bg-surface p-4 shadow-sm"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium text-foreground">
+                    {m.anniversary.name}
+                  </span>
+                  <span className="text-sm text-muted-foreground">
+                    {formatSchedule(m.anniversary.month, m.anniversary.day)}
+                  </span>
+                </div>
+                <div className="mt-2 text-foreground">
+                  <Link
+                    href={`/danshintoto/${m.householdId}/kakochou/${m.entryId}`}
+                    className="text-info hover:underline"
+                  >
+                    {m.secularName}
+                  </Link>
+                  {m.kaimyoName && (
+                    <span className="ml-2 text-sm text-muted-foreground">
+                      {m.kaimyoName}
+                    </span>
+                  )}
+                </div>
+                <div className="mt-1 text-sm text-muted-foreground">
+                  <Link
+                    href={`/danshintoto/${m.householdId}`}
+                    className="text-info hover:underline"
+                  >
+                    {m.householdName}
+                  </Link>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
+      <p className="text-xs text-muted-foreground">
         ※ 対象は 1/3/7/13/17/23/27/33/37/50 回忌です。2/29 が命日の方で、法要年が平年の場合は 3/1 に補正しています。
       </p>
     </div>

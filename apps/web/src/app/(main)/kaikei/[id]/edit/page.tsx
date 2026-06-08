@@ -46,7 +46,7 @@ export default async function EditTransactionPage({
   return (
     <div className="space-y-6">
       <div>
-        <nav className="text-sm text-gray-500">
+        <nav className="text-sm text-muted-foreground">
           <Link href="/dashboard" className="hover:underline">
             ダッシュボード
           </Link>
@@ -59,14 +59,14 @@ export default async function EditTransactionPage({
             {TRANSACTION_CATEGORY_LABELS[tx.category]}
           </Link>
           <span className="mx-2">/</span>
-          <span className="text-gray-700">編集</span>
+          <span className="text-foreground">編集</span>
         </nav>
-        <h1 className="mt-2 text-2xl font-serif tracking-wider">
+        <h1 className="mt-2 text-2xl font-rounded tracking-wider">
           入出金を編集する
         </h1>
       </div>
 
-      <div className="rounded border border-gray-200 bg-white p-6">
+      <div className="rounded border border-border bg-surface p-6">
         <TransactionForm
           action={updateTransactionAction}
           submitLabel="保存する"

@@ -3,24 +3,30 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { google } from 'googleapis';
-import { requireCurrentTenantId } from '@/lib/auth';
+import { requireCapability } from '@/lib/auth';
+import { recordAudit } from '@/lib/audit';
+import { decryptSecret } from '@/lib/crypto';
 import { withTenant } from '@/lib/db';
 
 /**
  * Google Calendar 連携を解除する。
  *
- * - 保存している refresh_token を Google 側で revoke
+ * - 保存している refresh_token を Google 側で revoke (P-6: 暗号化されていれば復号して使う)
  * - DB からも関連フィールドをクリア
  */
 export async function disconnectGoogleCalendarAction(): Promise<void> {
-  const tenantId = await requireCurrentTenantId();
+  const user = await requireCapability('destructive');
+  const tenantId = user.tenantId;
 
   const refreshToken = await withTenant(tenantId, async (tx) => {
     const tenant = await tx.tenant.findUnique({
       where: { id: tenantId },
       select: { googleRefreshToken: true },
     });
-    const token = tenant?.googleRefreshToken ?? null;
+    // P-6: 保存値は暗号化されている可能性があるため復号して revoke に使う (平文は素通し)。
+    const token = tenant?.googleRefreshToken
+      ? decryptSecret(tenant.googleRefreshToken) || null
+      : null;
 
     await tx.tenant.update({
       where: { id: tenantId },
@@ -29,6 +35,14 @@ export async function disconnectGoogleCalendarAction(): Promise<void> {
         googleConnectedEmail: null,
         googleConnectedAt: null,
       },
+    });
+
+    await recordAudit(tx, tenantId, {
+      actorId: user.id,
+      action: 'DISCONNECT',
+      entityType: 'Tenant',
+      entityId: tenantId,
+      summary: 'Google Calendar 連携を解除',
     });
 
     return token;

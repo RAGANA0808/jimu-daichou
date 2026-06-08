@@ -11,6 +11,7 @@ export type MapPlotTile = {
   positionX: number | null;
   positionY: number | null;
   householderName: string | null;
+  monumentName: string | null;
 };
 
 export type DragData = {

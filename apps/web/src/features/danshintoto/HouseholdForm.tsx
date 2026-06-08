@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useActionState } from 'react';
+import { VoiceTextarea } from '@/components/ui';
 import {
   initialHouseholdFormState,
   type HouseholdFieldName,
@@ -21,6 +22,8 @@ type Props = {
   householdId?: string;
   /** キャンセル時の戻り先。編集ならその世帯の詳細、登録なら一覧。 */
   cancelHref: string;
+  /** M-5 楽観ロックトークン (編集時のみ)。hidden input として送出される。 */
+  expectedUpdatedAt?: string;
 };
 
 type FieldProps = {
@@ -49,7 +52,7 @@ function TextField({
   const value = state.values?.[name] ?? defaultValue ?? '';
   return (
     <div className="space-y-1">
-      <label htmlFor={name} className="block text-sm font-medium text-gray-700">
+      <label htmlFor={name} className="block text-sm font-medium text-foreground">
         {label}
         {required && <span className="ml-1 text-red-600">*</span>}
       </label>
@@ -62,7 +65,7 @@ function TextField({
         placeholder={placeholder}
         autoComplete={autoComplete}
         aria-invalid={error ? 'true' : undefined}
-        className="block w-full rounded border border-gray-300 px-3 py-2 text-base focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
+        className="block w-full rounded border border-border px-3 py-2 text-base focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
       />
       {error && <p className="text-sm text-red-700">{error}</p>}
     </div>
@@ -84,16 +87,16 @@ function TextareaField({
   const value = state.values?.[name] ?? defaultValue ?? '';
   return (
     <div className="space-y-1">
-      <label htmlFor={name} className="block text-sm font-medium text-gray-700">
+      <label htmlFor={name} className="block text-sm font-medium text-foreground">
         {label}
       </label>
-      <textarea
+      <VoiceTextarea
         id={name}
         name={name}
         rows={3}
         defaultValue={value}
         aria-invalid={error ? 'true' : undefined}
-        className="block w-full rounded border border-gray-300 px-3 py-2 text-base focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
+        voiceFieldLabel="備考メモ"
       />
       {error && <p className="text-sm text-red-700">{error}</p>}
     </div>
@@ -106,6 +109,7 @@ export function HouseholdForm({
   submitLabel,
   householdId,
   cancelHref,
+  expectedUpdatedAt,
 }: Props) {
   const [state, formAction, isPending] = useActionState(
     action,
@@ -117,6 +121,19 @@ export function HouseholdForm({
   return (
     <form action={formAction} noValidate className="space-y-5">
       {householdId && <input type="hidden" name="id" value={householdId} />}
+      {expectedUpdatedAt && (
+        <input
+          type="hidden"
+          name="expectedUpdatedAt"
+          value={expectedUpdatedAt}
+        />
+      )}
+
+      {state.formError && (
+        <p className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800">
+          {state.formError}
+        </p>
+      )}
 
       <TextField
         name="householderName"
@@ -187,6 +204,11 @@ export function HouseholdForm({
         />
       </div>
 
+      <p className="rounded border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+        第 2 連絡先・ご親族などの連絡先は、登録後にカルテ詳細の「連絡先」から
+        ご家族ごとに追加・並べ替えができます。
+      </p>
+
       <TextareaField
         name="memo"
         label="備考メモ"
@@ -198,13 +220,13 @@ export function HouseholdForm({
         <button
           type="submit"
           disabled={isPending}
-          className="rounded bg-gray-900 px-4 py-2 text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-400"
+          className="inline-flex min-h-touch items-center rounded bg-brand px-4 py-2 font-medium text-brand-foreground transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isPending ? '保存中…' : submitLabel}
         </button>
         <Link
           href={cancelHref}
-          className="rounded border border-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-100"
+          className="rounded border border-border px-4 py-2 text-foreground hover:bg-muted"
         >
           キャンセル
         </Link>

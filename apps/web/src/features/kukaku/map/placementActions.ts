@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { requireCurrentTenantId } from '@/lib/auth';
+import { requireCapability } from '@/lib/auth';
 import { assertValidUuid, withTenant } from '@/lib/db';
 import { normalizePosition } from './grid';
 
@@ -35,7 +35,7 @@ export async function updateGravePlotPlacementAction(input: {
     return { status: 'error', message: '座標が整数ではありません。' };
   }
 
-  const tenantId = await requireCurrentTenantId();
+  const tenantId = (await requireCapability('update')).tenantId;
 
   try {
     await withTenant(tenantId, async (tx) => {
@@ -94,7 +94,7 @@ export async function unplaceGravePlotAction(input: {
   }
   assertValidUuid(gravePlotId, 'gravePlotId');
 
-  const tenantId = await requireCurrentTenantId();
+  const tenantId = (await requireCapability('update')).tenantId;
 
   try {
     await withTenant(tenantId, async (tx) => {

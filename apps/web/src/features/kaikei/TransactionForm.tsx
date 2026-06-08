@@ -101,7 +101,7 @@ export function TransactionForm({
       )}
 
       <div className="space-y-1">
-        <span className="block text-sm font-medium text-gray-700">
+        <span className="block text-sm font-medium text-foreground">
           区分<span className="ml-1 text-red-600">*</span>
         </span>
         <div className="flex gap-3">
@@ -110,8 +110,8 @@ export function TransactionForm({
               key={d}
               className={`flex flex-1 cursor-pointer items-center justify-center gap-2 rounded border px-4 py-2 text-sm ${
                 direction === d
-                  ? 'border-gray-900 bg-gray-900 text-white'
-                  : 'border-gray-300 bg-white text-gray-700 hover:border-gray-500'
+                  ? 'border-brand bg-brand text-brand-foreground'
+                  : 'border-border bg-surface text-foreground hover:border-brand'
               }`}
             >
               <input
@@ -133,7 +133,7 @@ export function TransactionForm({
         <div className="space-y-1">
           <label
             htmlFor="category"
-            className="block text-sm font-medium text-gray-700"
+            className="block text-sm font-medium text-foreground"
           >
             カテゴリ<span className="ml-1 text-red-600">*</span>
           </label>
@@ -143,7 +143,7 @@ export function TransactionForm({
             defaultValue={safeCategory}
             key={`category-${direction}`}
             aria-invalid={state.errors?.category ? 'true' : undefined}
-            className="block w-full rounded border border-gray-300 px-3 py-2 text-base focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
+            className="block w-full rounded border border-border px-3 py-2 text-base focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
           >
             {categoryCandidates.map((c) => (
               <option key={c} value={c}>
@@ -157,7 +157,7 @@ export function TransactionForm({
         <div className="space-y-1">
           <label
             htmlFor="amount"
-            className="block text-sm font-medium text-gray-700"
+            className="block text-sm font-medium text-foreground"
           >
             金額<span className="ml-1 text-red-600">*</span>
           </label>
@@ -173,9 +173,9 @@ export function TransactionForm({
               defaultValue={amountValue}
               placeholder="例: 30000"
               aria-invalid={state.errors?.amount ? 'true' : undefined}
-              className="block w-full rounded border border-gray-300 px-3 py-2 text-base focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
+              className="block w-full rounded border border-border px-3 py-2 text-base focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
             />
-            <span className="text-sm text-gray-600">円</span>
+            <span className="text-sm text-muted-foreground">円</span>
           </div>
           <FieldError message={state.errors?.amount} />
         </div>
@@ -184,7 +184,7 @@ export function TransactionForm({
       <div className="space-y-1">
         <label
           htmlFor="paidAt"
-          className="block text-sm font-medium text-gray-700"
+          className="block text-sm font-medium text-foreground"
         >
           日付<span className="ml-1 text-red-600">*</span>
         </label>
@@ -195,7 +195,7 @@ export function TransactionForm({
           required
           defaultValue={paidAtValue}
           aria-invalid={state.errors?.paidAt ? 'true' : undefined}
-          className="block w-full rounded border border-gray-300 px-3 py-2 text-base focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900 sm:max-w-xs"
+          className="block w-full rounded border border-border px-3 py-2 text-base focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand sm:max-w-xs"
         />
         <FieldError message={state.errors?.paidAt} />
       </div>
@@ -203,7 +203,7 @@ export function TransactionForm({
       <div className="space-y-1">
         <label
           htmlFor="householdId"
-          className="block text-sm font-medium text-gray-700"
+          className="block text-sm font-medium text-foreground"
         >
           世帯
         </label>
@@ -214,7 +214,7 @@ export function TransactionForm({
               name="householdId"
               value={lockedHouseholdId}
             />
-            <p className="rounded border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">
+            <p className="rounded border border-border bg-muted px-3 py-2 text-sm text-foreground">
               {households.find((h) => h.id === lockedHouseholdId)
                 ?.householderName ?? '(世帯)'}{' '}
               家 (固定)
@@ -226,7 +226,7 @@ export function TransactionForm({
             name="householdId"
             defaultValue={householdIdValue}
             aria-invalid={state.errors?.householdId ? 'true' : undefined}
-            className="block w-full rounded border border-gray-300 px-3 py-2 text-base focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
+            className="block w-full rounded border border-border px-3 py-2 text-base focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
           >
             <option value="">— 寺側の経費・寄付等 (世帯なし) —</option>
             {households.map((h) => (
@@ -236,7 +236,7 @@ export function TransactionForm({
             ))}
           </select>
         )}
-        <p className="text-xs text-gray-500">
+        <p className="text-xs text-muted-foreground">
           護持会費・御布施は世帯を選択。寺側の経費は世帯なしで記録します。
         </p>
         <FieldError message={state.errors?.householdId} />
@@ -245,7 +245,7 @@ export function TransactionForm({
       <div className="space-y-1">
         <label
           htmlFor="paymentMethod"
-          className="block text-sm font-medium text-gray-700"
+          className="block text-sm font-medium text-foreground"
         >
           支払方法
         </label>
@@ -256,7 +256,7 @@ export function TransactionForm({
           defaultValue={paymentMethodValue}
           placeholder="例: 現金 / 銀行振込 / ゆうちょ"
           list="payment-method-suggestions"
-          className="block w-full rounded border border-gray-300 px-3 py-2 text-base focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
+          className="block w-full rounded border border-border px-3 py-2 text-base focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
         />
         <datalist id="payment-method-suggestions">
           <option value="現金" />
@@ -268,7 +268,7 @@ export function TransactionForm({
       </div>
 
       <div className="space-y-1">
-        <label htmlFor="memo" className="block text-sm font-medium text-gray-700">
+        <label htmlFor="memo" className="block text-sm font-medium text-foreground">
           備考メモ
         </label>
         <textarea
@@ -277,7 +277,7 @@ export function TransactionForm({
           rows={3}
           defaultValue={memoValue}
           aria-invalid={state.errors?.memo ? 'true' : undefined}
-          className="block w-full rounded border border-gray-300 px-3 py-2 text-base focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
+          className="block w-full rounded border border-border px-3 py-2 text-base focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
         />
         <FieldError message={state.errors?.memo} />
       </div>
@@ -286,13 +286,13 @@ export function TransactionForm({
         <button
           type="submit"
           disabled={isPending}
-          className="rounded bg-gray-900 px-4 py-2 text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-400"
+          className="inline-flex min-h-touch items-center rounded bg-brand px-4 py-2 font-medium text-brand-foreground transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isPending ? '保存中…' : submitLabel}
         </button>
         <Link
           href={cancelHref}
-          className="rounded border border-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-100"
+          className="rounded border border-border px-4 py-2 text-foreground hover:bg-muted"
         >
           キャンセル
         </Link>

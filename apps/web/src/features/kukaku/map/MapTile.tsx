@@ -5,24 +5,16 @@ import type { CSSProperties } from 'react';
 import { useRouter } from 'next/navigation';
 import type { MapPlotTile, DragData } from './types';
 import { TILE_SIZE } from './grid';
+import {
+  GRAVE_PLOT_STATUS_LABELS,
+  GRAVE_PLOT_STATUS_TILE_CLASSES,
+  GRAVE_PLOT_TYPE_SHORT,
+} from '../types';
 
 type Props = {
   plot: MapPlotTile;
   source: 'canvas' | 'palette';
 };
-
-function statusClasses(status: MapPlotTile['status']): string {
-  switch (status) {
-    case 'AVAILABLE':
-      return 'bg-gray-100 border-gray-400 text-gray-700';
-    case 'RESERVED':
-      return 'bg-amber-100 border-amber-600 text-amber-900';
-    case 'IN_USE':
-      return 'bg-blue-100 border-blue-600 text-blue-900';
-    case 'CLOSED':
-      return 'bg-gray-50 border-gray-400 border-dashed text-gray-500';
-  }
-}
 
 export function MapTile({ plot, source }: Props) {
   const router = useRouter();
@@ -58,8 +50,11 @@ export function MapTile({ plot, source }: Props) {
       }
     : {};
 
+  const subLabel = plot.monumentName ?? plot.householderName ?? '';
   const title = [
     `区画 ${plot.plotNumber}`,
+    `状態: ${GRAVE_PLOT_STATUS_LABELS[plot.status]}`,
+    plot.monumentName ? `墓標: ${plot.monumentName}` : null,
     plot.householderName ? `契約: ${plot.householderName}` : null,
   ]
     .filter(Boolean)
@@ -70,10 +65,12 @@ export function MapTile({ plot, source }: Props) {
       ref={setNodeRef}
       style={{ ...baseStyle, ...positionStyle, ...transformStyle }}
       className={[
-        'flex items-center justify-center rounded border text-xs font-medium',
-        'select-none',
-        statusClasses(plot.status),
-        isDragging ? 'opacity-50 shadow-lg z-10' : 'hover:ring-2 hover:ring-gray-400',
+        'flex flex-col items-center justify-center gap-0.5 rounded border px-0.5 text-center',
+        'select-none overflow-hidden',
+        GRAVE_PLOT_STATUS_TILE_CLASSES[plot.status],
+        isDragging
+          ? 'opacity-50 shadow-lg z-10'
+          : 'hover:ring-2 hover:ring-muted-foreground',
       ].join(' ')}
       title={title}
       {...attributes}
@@ -89,7 +86,15 @@ export function MapTile({ plot, source }: Props) {
       role="button"
       tabIndex={0}
     >
-      {plot.plotNumber}
+      <span className="text-xs font-medium leading-none">
+        {GRAVE_PLOT_TYPE_SHORT[plot.plotType]}
+        {plot.plotNumber}
+      </span>
+      {subLabel.length > 0 && (
+        <span className="w-full truncate text-[10px] leading-none opacity-80">
+          {subLabel}
+        </span>
+      )}
     </div>
   );
 }

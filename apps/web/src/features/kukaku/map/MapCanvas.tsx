@@ -29,8 +29,8 @@ export const MapCanvas = forwardRef<HTMLDivElement, Props>(function MapCanvas(
     <div
       ref={handleRef}
       className={[
-        'relative overflow-auto rounded border bg-white',
-        isOver ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-300',
+        'relative overflow-auto rounded border bg-surface',
+        isOver ? 'border-blue-500 ring-2 ring-blue-200' : 'border-border',
       ].join(' ')}
       style={{
         width,

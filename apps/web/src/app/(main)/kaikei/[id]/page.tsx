@@ -5,6 +5,9 @@ import {
   TRANSACTION_CATEGORY_LABELS,
   TRANSACTION_DIRECTION_LABELS,
 } from '@/features/kaikei/types';
+import { can, getCurrentRole } from '@/lib/auth';
+import { DocumentSection } from '@/features/documents/DocumentSection';
+import { listDocumentsByTransaction } from '@/features/documents/queries';
 
 function formatJaDate(d: Date): string {
   return `${d.getUTCFullYear()}/${d.getUTCMonth() + 1}/${d.getUTCDate()}`;
@@ -27,9 +30,9 @@ function DetailRow({
 }) {
   return (
     <>
-      <dt className="text-sm text-gray-500">{label}</dt>
-      <dd className="text-sm text-gray-900">
-        {value && value.length > 0 ? value : <span className="text-gray-400">—</span>}
+      <dt className="text-sm text-muted-foreground">{label}</dt>
+      <dd className="text-sm text-foreground">
+        {value && value.length > 0 ? value : <span className="text-muted-foreground">—</span>}
       </dd>
     </>
   );
@@ -46,10 +49,17 @@ export default async function TransactionDetailPage({
     notFound();
   }
 
+  const [documents, role] = await Promise.all([
+    listDocumentsByTransaction(tx.id),
+    getCurrentRole(),
+  ]);
+  const canEditDocs = role !== null && can(role, 'create');
+  const canDeleteDocs = role !== null && can(role, 'destructive');
+
   return (
     <div className="space-y-6">
       <div>
-        <nav className="text-sm text-gray-500">
+        <nav className="text-sm text-muted-foreground">
           <Link href="/dashboard" className="hover:underline">
             ダッシュボード
           </Link>
@@ -58,17 +68,17 @@ export default async function TransactionDetailPage({
             会計
           </Link>
           <span className="mx-2">/</span>
-          <span className="text-gray-700">{formatJaDate(tx.paidAt)} の記録</span>
+          <span className="text-foreground">{formatJaDate(tx.paidAt)} の記録</span>
         </nav>
         <div className="mt-2 flex items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-serif tracking-wider">
+            <h1 className="text-2xl font-rounded tracking-wider">
               {TRANSACTION_DIRECTION_LABELS[tx.direction]} ・{' '}
               {TRANSACTION_CATEGORY_LABELS[tx.category]}
             </h1>
             <p
               className={`mt-1 text-3xl font-medium ${
-                tx.direction === 'INCOME' ? 'text-gray-900' : 'text-orange-700'
+                tx.direction === 'INCOME' ? 'text-foreground' : 'text-orange-700'
               }`}
             >
               {tx.direction === 'EXPENSE' ? '−' : ''}
@@ -77,14 +87,14 @@ export default async function TransactionDetailPage({
           </div>
           <Link
             href={`/kaikei/${tx.id}/edit`}
-            className="rounded border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+            className="rounded border border-border px-4 py-2 text-sm text-foreground hover:bg-muted"
           >
             編集
           </Link>
         </div>
       </div>
 
-      <div className="rounded border border-gray-200 bg-white p-6">
+      <div className="rounded border border-border bg-surface p-6">
         <h2 className="text-lg font-medium">記録内容</h2>
         <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-6 gap-y-3">
           <DetailRow label="日付" value={formatJaDate(tx.paidAt)} />
@@ -98,34 +108,41 @@ export default async function TransactionDetailPage({
           />
           <DetailRow label="金額" value={formatYen(tx.amount)} />
           <DetailRow label="支払方法" value={tx.paymentMethod} />
-          <dt className="text-sm text-gray-500">世帯</dt>
-          <dd className="text-sm text-gray-900">
+          <dt className="text-sm text-muted-foreground">世帯</dt>
+          <dd className="text-sm text-foreground">
             {tx.household ? (
               <Link
                 href={`/danshintoto/${tx.household.id}`}
-                className="text-gray-900 underline decoration-gray-300 underline-offset-2 hover:decoration-gray-900"
+                className="text-foreground underline decoration-border underline-offset-2 hover:decoration-brand"
               >
                 {tx.household.householderName}（{tx.household.nameKana}）
               </Link>
             ) : (
-              <span className="text-gray-400">— (寺側の経費・寄付等)</span>
+              <span className="text-muted-foreground">— (寺側の経費・寄付等)</span>
             )}
           </dd>
         </dl>
       </div>
 
-      <div className="rounded border border-gray-200 bg-white p-6">
+      <div className="rounded border border-border bg-surface p-6">
         <h2 className="text-lg font-medium">備考</h2>
-        <div className="mt-3 whitespace-pre-wrap text-sm text-gray-900">
+        <div className="mt-3 whitespace-pre-wrap text-sm text-foreground">
           {tx.memo && tx.memo.length > 0 ? (
             tx.memo
           ) : (
-            <span className="text-gray-400">—</span>
+            <span className="text-muted-foreground">—</span>
           )}
         </div>
       </div>
 
-      <div className="rounded border border-gray-200 bg-white p-6 text-sm text-gray-500">
+      <DocumentSection
+        target={{ kind: 'transaction', id: tx.id }}
+        documents={documents}
+        canEdit={canEditDocs}
+        canDelete={canDeleteDocs}
+      />
+
+      <div className="rounded border border-border bg-surface p-6 text-sm text-muted-foreground">
         <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2">
           <dt>登録日</dt>
           <dd>{formatJaDateTime(tx.createdAt)}</dd>

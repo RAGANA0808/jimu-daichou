@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { requireCurrentTenantId } from '@/lib/auth';
+import { requireCapability } from '@/lib/auth';
 import { withTenant } from '@/lib/db';
 import type {
   TenantSettingsFieldName,
@@ -46,7 +46,7 @@ export async function updateTenantSettingsAction(
     return { status: 'error', errors, values };
   }
 
-  const tenantId = await requireCurrentTenantId();
+  const tenantId = (await requireCapability('admin')).tenantId;
   await withTenant(tenantId, (tx) =>
     tx.tenant.update({
       where: { id: tenantId },

@@ -17,16 +17,16 @@ export function UnplacedPalette({ plots }: Props) {
     <div
       ref={setNodeRef}
       className={[
-        'rounded border bg-white p-3',
-        isOver ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-300',
+        'rounded border bg-surface p-3',
+        isOver ? 'border-blue-500 ring-2 ring-blue-200' : 'border-border',
       ].join(' ')}
     >
       <div className="mb-2 flex items-center justify-between">
-        <h2 className="text-sm font-medium text-gray-700">未配置</h2>
-        <span className="text-xs text-gray-500">{plots.length} 件</span>
+        <h2 className="text-sm font-medium text-foreground">未配置</h2>
+        <span className="text-xs text-muted-foreground">{plots.length} 件</span>
       </div>
       {plots.length === 0 ? (
-        <p className="py-4 text-center text-xs text-gray-500">
+        <p className="py-4 text-center text-xs text-muted-foreground">
           このエリアに未配置の区画はありません。
         </p>
       ) : (
@@ -36,7 +36,7 @@ export function UnplacedPalette({ plots }: Props) {
           ))}
         </div>
       )}
-      <p className="mt-3 text-xs text-gray-500">
+      <p className="mt-3 text-xs text-muted-foreground">
         ここに区画をドラッグすると未配置に戻せます。
       </p>
     </div>

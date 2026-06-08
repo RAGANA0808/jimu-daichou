@@ -4,7 +4,9 @@ import {
   anniversaryInYearFor,
   anniversaryYear,
   findAnniversariesInYear,
+  isKaikiWithinCutoff,
   isValidKaiki,
+  isValidMemorialCutoff,
 } from './calculate';
 import { KAIKI_LIST } from './constants';
 
@@ -154,5 +156,101 @@ describe('findAnniversariesInYear', () => {
     const result = findAnniversariesInYear(extended, 2021);
     expect(result[0]?.kaimyo).toBe('釈浄雲');
     expect(result[0]?.anniversary.kaiki).toBe(1);
+  });
+});
+
+describe('isValidMemorialCutoff (弔い上げ回忌のバリデーション)', () => {
+  it('33 / 50 は有効', () => {
+    expect(isValidMemorialCutoff(33)).toBe(true);
+    expect(isValidMemorialCutoff(50)).toBe(true);
+  });
+
+  it('それ以外の回忌・値は無効', () => {
+    expect(isValidMemorialCutoff(37)).toBe(false);
+    expect(isValidMemorialCutoff(13)).toBe(false);
+    expect(isValidMemorialCutoff(0)).toBe(false);
+    expect(isValidMemorialCutoff(100)).toBe(false);
+  });
+});
+
+describe('isKaikiWithinCutoff (打ち切り判定)', () => {
+  it('cutoff 未設定 (null/undefined) は全回忌が対象', () => {
+    expect(isKaikiWithinCutoff(50, null)).toBe(true);
+    expect(isKaikiWithinCutoff(50, undefined)).toBe(true);
+    expect(isKaikiWithinCutoff(1, null)).toBe(true);
+  });
+
+  it('cutoff=33: 三十三回忌までは対象、三十七回忌以降は対象外', () => {
+    expect(isKaikiWithinCutoff(33, 33)).toBe(true);
+    expect(isKaikiWithinCutoff(37, 33)).toBe(false);
+    expect(isKaikiWithinCutoff(50, 33)).toBe(false);
+  });
+
+  it('cutoff=50: 五十回忌まで対象', () => {
+    expect(isKaikiWithinCutoff(50, 50)).toBe(true);
+    expect(isKaikiWithinCutoff(33, 50)).toBe(true);
+  });
+});
+
+describe('allAnniversariesOf — 弔い上げ (cutoff)', () => {
+  it('cutoff 未設定なら 10 回忌すべて返る (従来挙動)', () => {
+    const result = allAnniversariesOf({ year: 2020, month: 3, day: 15 });
+    expect(result).toHaveLength(10);
+  });
+
+  it('cutoff=33 なら三十三回忌までの 8 件、三十七・五十回忌は除外', () => {
+    const result = allAnniversariesOf({ year: 2020, month: 3, day: 15 }, 33);
+    const kaikis = result.map((a) => a.kaiki);
+    expect(kaikis).toEqual([1, 3, 7, 13, 17, 23, 27, 33]);
+    expect(kaikis).not.toContain(37);
+    expect(kaikis).not.toContain(50);
+  });
+
+  it('cutoff=50 は従来どおり全 10 件', () => {
+    const result = allAnniversariesOf({ year: 2020, month: 3, day: 15 }, 50);
+    expect(result).toHaveLength(10);
+  });
+});
+
+describe('anniversaryInYearFor — 弔い上げ (cutoff) 境界', () => {
+  const death = { year: 2020, month: 3, day: 15 };
+  // 三十三回忌 = 2052, 三十七回忌 = 2056, 五十回忌 = 2069
+
+  it('ちょうど打ち切り回忌の年は対象に含まれる (cutoff=33, 三十三回忌年)', () => {
+    const result = anniversaryInYearFor(death, 2052, 33);
+    expect(result?.kaiki).toBe(33);
+  });
+
+  it('打ち切りを超えた回忌の年は null (cutoff=33, 三十七回忌年)', () => {
+    expect(anniversaryInYearFor(death, 2056, 33)).toBeNull();
+  });
+
+  it('cutoff 未設定なら従来どおり五十回忌も返る', () => {
+    const result = anniversaryInYearFor(death, 2069, null);
+    expect(result?.kaiki).toBe(50);
+  });
+});
+
+describe('findAnniversariesInYear — 弔い上げ済み故人の除外', () => {
+  it('打ち切りを超えた故人は年忌表から除外される', () => {
+    // 2020 没。三十七回忌 = 2056。cutoff=33 の故人は 2056 年の案内対象外。
+    const deceased = [
+      { id: 'cut', deathDate: { year: 2020, month: 3, day: 15 }, memorialCutoff: 33 },
+      { id: 'keep', deathDate: { year: 2020, month: 3, day: 15 }, memorialCutoff: null },
+    ];
+    const result = findAnniversariesInYear(deceased, 2056);
+    const ids = result.map((r) => r.id);
+    expect(ids).toEqual(['keep']);
+    expect(result[0]?.anniversary.kaiki).toBe(37);
+  });
+
+  it('ちょうど打ち切り回忌の年は除外されない', () => {
+    const deceased = [
+      { id: 'cut', deathDate: { year: 2020, month: 3, day: 15 }, memorialCutoff: 33 },
+    ];
+    // 三十三回忌 = 2052
+    const result = findAnniversariesInYear(deceased, 2052);
+    expect(result).toHaveLength(1);
+    expect(result[0]?.anniversary.kaiki).toBe(33);
   });
 });

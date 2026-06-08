@@ -20,6 +20,7 @@ import {
 import { cn } from '@/lib/utils';
 import { getHouseholdById } from '@/features/danshintoto/queries';
 import { getDeathLedgerEntryById } from '@/features/kakochou/queries';
+import { getCurrentTenantSectDefaultCutoff } from '@/features/nenki/sect-cutoff';
 import { SoftDeleteEntryButton } from '@/features/kakochou/SoftDeleteEntryButton';
 import { can, getCurrentRole } from '@/lib/auth';
 import { DocumentSection } from '@/features/documents/DocumentSection';
@@ -121,7 +122,10 @@ export default async function DeathLedgerEntryDetailPage({
     day: entry.deathDay,
   });
 
-  const cutoff = entry.memorialCutoffAnniversary;
+  // 実効 cutoff: per-entry の設定が常に優先。未設定なら宗派既定にフォールバックする。
+  // sect=null/曹洞宗等では宗派既定が null となり従来挙動と完全一致する (後方互換)。
+  const sectDefaultCutoff = await getCurrentTenantSectDefaultCutoff();
+  const cutoff = entry.memorialCutoffAnniversary ?? sectDefaultCutoff;
   // 年が判明している場合のみ年忌を計算できる。年不明 (UNKNOWN) は計算対象外。
   const anniversaries: Anniversary[] =
     deathDate.year !== null
@@ -135,6 +139,10 @@ export default async function DeathLedgerEntryDetailPage({
     cutoff !== null && (cutoff === 33 || cutoff === 50)
       ? KAIKI_NAMES[cutoff]
       : null;
+  // この実効 cutoff が「故人ごとの設定」ではなく「宗派の既定」由来かを区別する
+  // (UI 上で出所が分かるよう注記する。設定画面の『故人ごとの設定が優先』と整合)。
+  const cutoffFromSect =
+    entry.memorialCutoffAnniversary === null && sectDefaultCutoff !== null;
 
   // 中陰 (忌日) は命日 (年月日すべて判明) が前提。精度不足なら算出しない。
   const chuinSchedule: ChuinDay[] =
@@ -202,7 +210,11 @@ export default async function DeathLedgerEntryDetailPage({
           <DetailRow label="埋葬場所" value={entry.burialLocation} />
           <DetailRow
             label="弔い上げ回忌"
-            value={cutoffLabel ? `${cutoffLabel}で弔い上げ` : '未設定（五十回忌まで）'}
+            value={
+              cutoffLabel
+                ? `${cutoffLabel}で弔い上げ${cutoffFromSect ? '（宗派既定）' : ''}`
+                : '未設定（五十回忌まで）'
+            }
           />
         </dl>
       </div>

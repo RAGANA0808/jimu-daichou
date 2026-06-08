@@ -5,6 +5,7 @@ import {
   findAnniversariesInYear,
   type Anniversary,
 } from '@/lib/nenki';
+import { getCurrentTenantSectDefaultCutoff } from './sect-cutoff';
 
 export type AnniversaryMatch = {
   entryId: string;
@@ -31,9 +32,13 @@ export async function findAnniversariesForYear(
   year: number,
 ): Promise<AnniversaryMatch[]> {
   const tenantId = await requireCurrentTenantId();
-
-  const entries = await withTenant(tenantId, (tx) =>
-    tx.deathLedgerEntry.findMany({
+  // 宗派の既定弔い上げ (per-entry の memorialCutoffAnniversary が常に優先される fallback) と
+  // 対象エントリ取得を並列化する。sectDefault は cache() 済みで軽量。
+  // sect=null/曹洞宗等では null となり従来挙動と完全一致する (後方互換)。
+  const [sectDefault, entries] = await Promise.all([
+    getCurrentTenantSectDefaultCutoff(),
+    withTenant(tenantId, (tx) =>
+      tx.deathLedgerEntry.findMany({
       where: {
         deletedAt: null,
         person: { household: { isActive: true } },
@@ -52,7 +57,8 @@ export async function findAnniversariesForYear(
         },
       },
     }),
-  );
+    ),
+  ]);
 
   const deceased = entries
     // deathYear: { not: null } で絞っているが、型上は nullable なのでここでも狭める。
@@ -65,8 +71,9 @@ export async function findAnniversariesForYear(
       secularName: e.secularName,
       kaimyoName: e.kaimyoName,
       ageAtDeath: e.ageAtDeath,
-      // 弔い上げ済み (打ち切り回忌超え) の故人を年忌表・案内対象から除外するため渡す
-      memorialCutoff: e.memorialCutoffAnniversary,
+      // 弔い上げ済み (打ち切り回忌超え) の故人を年忌表・案内対象から除外するため渡す。
+      // per-entry が常に優先。未設定 (null) のときだけ宗派既定にフォールバックする。
+      memorialCutoff: e.memorialCutoffAnniversary ?? sectDefault,
       // 構造化フィールドを真のソースとする。月日不明 (YEAR/YEAR_MONTH) は null のまま
       // 渡し、nenki 側が予定日の月日を null として扱う。
       deathDate: {

@@ -5,6 +5,7 @@ import { setHouseholdInactiveAction } from '@/features/danshintoto/actions';
 import { getHouseholdById } from '@/features/danshintoto/queries';
 import { listDeathLedgerEntriesByHousehold } from '@/features/kakochou/queries';
 import { NenkiBadges } from '@/features/kakochou/NenkiBadges';
+import { getCurrentTenantSectDefaultCutoff } from '@/features/nenki/sect-cutoff';
 import { formatDeathDateSeireki } from '@/lib/kakochou';
 import { listMemorialServicesByHousehold } from '@/features/houyou/queries';
 import { PREPARATION_STATUS_LABELS } from '@/features/houyou/types';
@@ -117,6 +118,7 @@ export default async function HouseholdDetailPage({
     successions,
     documents,
     timelineItems,
+    sectDefaultCutoff,
   ] = await Promise.all([
     listDeathLedgerEntriesByHousehold(household.id),
     listMemorialServicesByHousehold(household.id),
@@ -133,6 +135,7 @@ export default async function HouseholdDetailPage({
     listSuccessionsByHousehold(household.id),
     listDocumentsByHousehold(household.id),
     buildHouseholdTimeline(household.id),
+    getCurrentTenantSectDefaultCutoff(),
   ]);
 
   // UI 補助: 役割で操作ボタンの出し分けをする (サーバ側 requireCapability が本丸)。
@@ -501,7 +504,10 @@ export default async function HouseholdDetailPage({
                                 deathYear={e.deathYear}
                                 deathMonth={e.deathMonth}
                                 deathDay={e.deathDay}
-                                cutoff={e.memorialCutoffAnniversary}
+                                cutoff={
+                                  e.memorialCutoffAnniversary ??
+                                  sectDefaultCutoff
+                                }
                                 layout="scroll"
                               />
                             </td>

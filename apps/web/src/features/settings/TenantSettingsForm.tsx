@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useActionState } from 'react';
+import { SECT_OPTIONS } from '@/lib/nenki';
 import { updateTenantSettingsAction } from './actions';
 import {
   initialTenantSettingsFormState,
@@ -83,6 +84,35 @@ export function TenantSettingsForm({ initialValues }: Props) {
         state={state}
         defaultValue={initialValues.headPriestName}
       />
+
+      <div className="space-y-1">
+        <label
+          htmlFor="sect"
+          className="block text-sm font-medium text-foreground"
+        >
+          宗派
+        </label>
+        <p className="text-xs text-muted-foreground">
+          年忌の弔い上げの目安に使われます。浄土真宗系では三十三回忌が既定の目安になります。
+          （故人ごとの弔い上げ設定が常に優先されます）
+        </p>
+        <select
+          id="sect"
+          name="sect"
+          defaultValue={state.values?.sect ?? initialValues.sect}
+          className="block w-full rounded border border-border px-3 py-2 text-base focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+        >
+          <option value="">未設定（標準・五十回忌まで）</option>
+          {SECT_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+        {state.errors?.sect && (
+          <p className="text-sm text-red-700">{state.errors.sect}</p>
+        )}
+      </div>
 
       <div className="flex items-center gap-3 pt-2">
         <button

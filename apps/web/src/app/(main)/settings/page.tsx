@@ -4,6 +4,7 @@ import { disconnectGoogleCalendarAction } from '@/features/google/actions';
 import { getCurrentTenant } from '@/features/settings/queries';
 import { getCurrentUserProfile } from '@/features/account/queries';
 import { userRoleLabel } from '@/features/account/roles';
+import { SECT_LABELS, getSectDefaultCutoff, KAIKI_NAMES } from '@/lib/nenki';
 
 function DetailRow({
   label,
@@ -52,6 +53,7 @@ export default async function SettingsPage({
     google_connect?: string;
     reason?: string;
     account?: string;
+    setup?: string;
   }>;
 }) {
   const tenant = await getCurrentTenant();
@@ -67,8 +69,15 @@ export default async function SettingsPage({
   const message = status ? GOOGLE_CONNECT_MESSAGES[status] : null;
   const reasonDetail = reason ? ERROR_REASON_DETAILS[reason] : null;
   const accountUpdated = sp.account === 'updated';
+  const setupDone = sp.setup === 'done';
 
   const isConnected = tenant.googleRefreshToken !== null;
+
+  const setupIncomplete =
+    tenant.sect === null ||
+    (tenant.postalAccountName === null &&
+      tenant.postalAccountSymbol === null &&
+      tenant.postalAccountNumber === null);
 
   return (
     <div className="space-y-6">
@@ -123,6 +132,49 @@ export default async function SettingsPage({
         </p>
       )}
 
+      {setupDone && (
+        <p
+          role="status"
+          className="rounded bg-green-50 px-3 py-2 text-sm text-green-800"
+        >
+          初期設定を保存しました。
+        </p>
+      )}
+
+      {setupIncomplete ? (
+        <div className="rounded border border-brand bg-brand/5 p-6">
+          <h2 className="text-lg font-medium">初期設定</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            宗派や郵便口座の初期設定がまだのようです。順を追って設定できます。
+          </p>
+          <div className="mt-4">
+            <Link
+              href="/settings/setup"
+              className="inline-flex min-h-touch items-center rounded bg-brand px-4 py-2 text-sm font-medium text-brand-foreground transition-colors hover:bg-brand-hover"
+            >
+              初期設定をはじめる
+            </Link>
+          </div>
+        </div>
+      ) : (
+        <div className="rounded border border-border bg-surface p-6">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-medium">初期設定</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                宗派・郵便口座・初期科目をまとめて見直せます。
+              </p>
+            </div>
+            <Link
+              href="/settings/setup"
+              className="rounded border border-border px-4 py-2 text-sm text-foreground hover:bg-muted"
+            >
+              初期設定をやり直す
+            </Link>
+          </div>
+        </div>
+      )}
+
       <div className="rounded border border-border bg-surface p-6">
         <div className="flex items-center justify-between gap-4">
           <h2 className="text-lg font-medium">アカウント</h2>
@@ -168,8 +220,24 @@ export default async function SettingsPage({
         <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-6 gap-y-3">
           <DetailRow label="寺院名" value={tenant.name} />
           <DetailRow label="住職氏名" value={tenant.headPriestName} />
+          <DetailRow
+            label="宗派"
+            value={tenant.sect ? SECT_LABELS[tenant.sect] : null}
+          />
           <DetailRow label="URL スラッグ" value={tenant.slug} />
         </dl>
+        {(() => {
+          const def = getSectDefaultCutoff(tenant.sect ?? null);
+          return (
+            <p className="mt-3 text-xs text-muted-foreground">
+              年忌の既定弔い上げの目安:{' '}
+              {def !== null
+                ? `${KAIKI_NAMES[def as 33 | 50] ?? `${def}回忌`}まで`
+                : '五十回忌まで（標準）'}
+              （故人ごとの設定が優先されます）
+            </p>
+          );
+        })()}
       </div>
 
       <div className="rounded border border-border bg-surface p-6">

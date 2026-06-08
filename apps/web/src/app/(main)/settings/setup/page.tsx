@@ -1,9 +1,9 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { TenantSettingsForm } from '@/features/settings/TenantSettingsForm';
 import { getCurrentTenant } from '@/features/settings/queries';
+import { SetupWizard } from '@/features/settings/SetupWizard';
 
-export default async function EditSettingsPage() {
+export default async function SetupPage() {
   const tenant = await getCurrentTenant();
   if (!tenant) {
     notFound();
@@ -21,17 +21,24 @@ export default async function EditSettingsPage() {
             設定
           </Link>
           <span className="mx-2">/</span>
-          <span className="text-foreground">編集</span>
+          <span className="text-foreground">初期設定</span>
         </nav>
-        <h1 className="mt-2 text-2xl font-rounded tracking-wider">設定を編集する</h1>
+        <h1 className="mt-2 text-2xl font-rounded tracking-wider">初期設定</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          宗派や郵便口座など、運用の土台となる情報を順を追って設定します。
+        </p>
       </div>
 
       <div className="rounded border border-border bg-surface p-6">
-        <TenantSettingsForm
+        <SetupWizard
           initialValues={{
             name: tenant.name,
             headPriestName: tenant.headPriestName ?? '',
             sect: tenant.sect ?? '',
+            postalAccountName: tenant.postalAccountName ?? '',
+            postalAccountSymbol: tenant.postalAccountSymbol ?? '',
+            postalAccountNumber: tenant.postalAccountNumber ?? '',
+            postalTransferNote: tenant.postalTransferNote ?? '',
           }}
         />
       </div>

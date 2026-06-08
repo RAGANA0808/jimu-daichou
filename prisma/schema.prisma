@@ -29,6 +29,7 @@ model Tenant {
   name           String // 寺院名 (例: "○○寺")
   slug           String  @unique // URL スラッグ
   headPriestName String? // 住職氏名 (案内状署名等で使用)
+  sect           Sect? // 宗派 (未設定=null=標準スケジュール。年忌の既定弔い上げの目安に使う)
 
   // Google Calendar 連携 (法要予定の自動同期用)
   googleRefreshToken   String?
@@ -105,6 +106,24 @@ enum UserRole {
   PRIEST // 僧侶
   STAFF // 事務員
   READ_ONLY // 閲覧のみ
+}
+
+// =========================================
+// 宗派 (年忌の既定弔い上げの目安に使う・表示用)
+// =========================================
+
+enum Sect {
+  SOTO // 曹洞宗
+  RINZAI // 臨済宗
+  OBAKU // 黄檗宗
+  TENDAI // 天台宗
+  SHINGON // 真言宗
+  JODO // 浄土宗
+  JODO_SHINSHU_HONGANJI // 浄土真宗本願寺派
+  SHINSHU_OTANI // 真宗大谷派
+  NICHIREN // 日蓮宗
+  JISHU // 時宗
+  OTHER // その他
 }
 
 // =========================================

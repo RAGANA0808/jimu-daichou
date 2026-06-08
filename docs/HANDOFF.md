@@ -34,8 +34,12 @@
 | **PERMISSION** | RBAC実効化(HEAD_PRIEST全権 / READ_ONLY変更不可 / destructive=PRIEST+ / admin=HEAD_PRIESTのみ) / AuditLog監査ログ / refresh_token AES-256-GCM暗号化(土台) / 役割管理UI+監査ビューア | 20260607030000 |
 | **MEMORIAL-EXPIRY** | 合祀候補抽出 / 改葬・墓じまい・合祀移行(destructiveガード+監査+手動確定=特許回避) / 年忌表 戒名順CSV(BOM,EXPORT監査) / 法要終了時刻 / 重複案内防止(ShipmentRecipientItem 故人×回忌×年の構造化突合) | 20260607040000 |
 | **PAPERLESS-MOBILE** | 書類クラウド保管(Document 紐付け列追加・Supabase Storage・署名URL・論理削除・スマホ撮影) / 音声入力(Web Speech API) / 寺行事(TempleEvent 新設・カレンダー連携) / 横断年表(対応履歴×法要マージ read-only) / 楽観ロック(updatedAt) / かんたん登録ウィザード | 20260608010000 |
+| **OUTREACH-NOTIFY / T-4** | 巡回(棚経・月参り)：CircuitTour/CircuitStop 新設・訪問先の順序リスト並べ替え(↑↓・**地図経路描画なし=YMFG回避**)・訪問/巡回ステータス・担当者×日付シフト表PDF(export+監査)・論理削除 | 20260608020000 |
+| **PII 持出ガード統一** | 氏名/住所を含む CSV/PDF 8ルートを `requireCapability('export')` + EXPORT 監査に統一(READ_ONLY 持出と監査欠落を是正) | — (コード) |
 
-**DBに適用済みの最終migration: `20260608010000_add_paperless_mobile`**（`prisma migrate status` = up to date・25 migrations）。
+**DBに適用済みの最終migration: `20260608020000_add_circuit_tour`**（`prisma migrate status` = up to date）。
+
+> **PAPERLESS-MOBILE / T-4 とも実機 click-through 検証済み**（chrome-devtools・dev 自己ログイン）。T-4 は巡回作成→訪問先追加→並べ替え→ステータス→シフト表PDF→除外(→/junkai 遷移)を住職アカウントで確認。検証中に T-4 の2点(reorder の部分配列堅牢化[med]・除外後 404 の redirect 追加)を修正・再検証済み。
 
 > **PAPERLESS-MOBILE は実機 click-through 検証済み**（chrome-devtools・dev 自己ログイン）。書類 upload→プレビュー(署名URL)→除外 / 寺行事 CRUD / 年表 / かんたん登録 / 楽観ロックの競合検知 を住職アカウントで確認。**Storage バケットは初回 upload で自動作成**（手動設定不要＝旧懸念解消）。
 
@@ -83,10 +87,10 @@
 | 優先 | ウェーブ | 内容 | 前提・注意 |
 | :-- | :-- | :-- | :-- |
 | ~~済~~ | ~~**PAPERLESS-MOBILE**~~ | ✅ 2026-06-08 完了（migration 20260608010000・実機検証済み） | — |
-| 1 | **OUTREACH-NOTIFY** | 通知・一斉連絡 / 棚経・月参り巡回（**順序リストのみ・地図経路描画はしない=YMFG特許回避**）/ シフト表帳票 / 宗派プリセット | カレンダー双方向(取込)もここ。抽出→人手確認→生成の手動トリガ維持(特許回避)。**TempleEvent(寺行事)は導入済み**＝定期法務/巡回はこれを土台にできる |
+| ~~済~~ | ~~**PII 持出ガード統一**~~ | ✅ 2026-06-08 完了（8ルートを export+監査に統一） | — |
+| 1 | **OUTREACH-NOTIFY**（残り） | ~~T-4 巡回・シフト表~~ ✅完了。**残: O-2/O-3 宗派プリセット+初期設定ウィザード → T-2 カレンダー双方向(取込) → T-3/A-5 自動リマインド・マルチチャネル配信** | T-3/A-5 は**メール送信基盤ゼロ・対外送信**のためプロバイダ選定(Resend 等)+API キー+送信承認が前提＝独立フェーズ。Classix 回避で通知は寺内部限定。抽出→人手確認→生成の手動トリガ維持 |
 | 2 | **ANALYTICS-LATER** | §12 経年トレンド・檀家減少リスク予測（グラフ層）/ 領収書 等 | 「更新順の行リスト」をダッシュボード主構成にしない(せいざん特許JP7282407回避)。集計値の折れ線/棒に限定 |
 | 3 | **LEGAL（商用前）** | 弁理士FTO・商標調査（「檀信徒カルテ」「寺務台帳」の対外使用） | 機能ではなく非機能タスク。商用化前に必須 |
-| 随時 | **PII 持出ガードの統一** | shipment/csv・各 PDF ルートに `requireCapability('export')` + EXPORT 監査を統一（READ_ONLY 持出と監査欠落の是正） | レビュー検出。下記「既知の問題 D」参照 |
 
 **いつでも入れてよい改善（安価・UI層中心）**: 年忌バッジに「次回まであと◯年」明示 / タイル面に種別+番号+使用者姓 / 一覧の戒名順ソート・並べ替え導線 / 詳細ページのクエリ集約（=問題A選択肢3）。
 

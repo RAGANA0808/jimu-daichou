@@ -38,6 +38,8 @@ export type AuditEntityType =
   | 'Tenant'
   | 'Document'
   | 'TempleEvent'
+  | 'CircuitTour'
+  | 'CircuitStop'
   // 複数モデルにまたがる一括操作 (個別の行 id を持たない)。entityId は null。
   | 'Import'
   | 'Export';

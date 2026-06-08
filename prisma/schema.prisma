@@ -74,6 +74,8 @@ model Tenant {
   householdSuccessions     HouseholdSuccession[]
   auditLogs                AuditLog[]
   templeEvents             TempleEvent[]
+  circuitTours             CircuitTour[]
+  circuitStops             CircuitStop[]
 }
 
 // =========================================
@@ -142,6 +144,7 @@ model Household {
   householdTags          HouseholdTag[]
   contactPoints          ContactPoint[]
   successions            HouseholdSuccession[]
+  circuitStops           CircuitStop[]
 
   @@index([tenantId])
   @@index([tenantId, nameKana]) // かな検索
@@ -294,6 +297,75 @@ model TempleEvent {
 }
 
 // =========================================
+// 巡回 (棚経・月参り) — 訪問先の順序付きリスト + シフト表
+// 特許回避: 地図経路・座標ルート・最適化は持たない。順序リストと帳票のみ。
+// =========================================
+
+model CircuitTour {
+  id             String            @id @default(uuid()) @db.Uuid
+  tenantId       String            @db.Uuid
+  title          String // 巡回名 (例: "8月 棚経")
+  tourType       CircuitTourType   @default(TANAGYO)
+  scheduledDate  DateTime          @db.Date // 実施日 (JST 基準・UTC0時保存)
+  assignedUserId String?           @db.Uuid // 担当寺族 (FK 無し scalar、MemorialService 慣習に倣う)
+  status         CircuitTourStatus @default(PLANNED)
+  memo           String?
+  deletedAt      DateTime? // 論理削除 (除外)。物理削除しない
+  deletedBy      String?           @db.Uuid // 除外操作者 (User.id)
+  deletedReason  String? // 除外理由
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  tenant Tenant        @relation(fields: [tenantId], references: [id])
+  stops  CircuitStop[]
+
+  @@index([tenantId])
+  @@index([tenantId, scheduledDate])
+}
+
+model CircuitStop {
+  id            String            @id @default(uuid()) @db.Uuid
+  tenantId      String            @db.Uuid
+  circuitTourId String            @db.Uuid // 親巡回
+  householdId   String?           @db.Uuid // 訪問先世帯 (任意)
+  gravePlotId   String?           @db.Uuid // 訪問先区画 (任意)
+  visitLabel    String? // 未登録先の自由記述フォールバック
+  sortOrder     Int               @default(0) // 訪問順 (昇順)
+  status        CircuitStopStatus @default(PENDING)
+  memo          String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  tenant    Tenant      @relation(fields: [tenantId], references: [id])
+  tour      CircuitTour @relation(fields: [circuitTourId], references: [id], onDelete: Cascade)
+  household Household?  @relation(fields: [householdId], references: [id])
+  gravePlot GravePlot?  @relation(fields: [gravePlotId], references: [id])
+
+  @@index([tenantId])
+  @@index([circuitTourId, sortOrder])
+  @@index([householdId])
+  @@index([gravePlotId])
+}
+
+enum CircuitTourType {
+  TANAGYO // 棚経
+  TSUKIMAIRI // 月参り
+  OTHER
+}
+
+enum CircuitTourStatus {
+  PLANNED
+  DONE
+  CANCELED
+}
+
+enum CircuitStopStatus {
+  PENDING
+  VISITED
+  SKIPPED
+}
+
+// =========================================
 // 塔婆 (申込・読上帳)
 // =========================================
 // 法要 1 件に対し複数の塔婆申込をぶら下げる。tobaCount (MemorialService の素朴な
@@ -358,6 +430,7 @@ model GravePlot {
   burials                  Burial[]
   graveContracts           GraveContract[]
   documents                Document[]
+  circuitStops             CircuitStop[]
 
   @@unique([tenantId, plotNumber])
   @@index([tenantId])

@@ -44,6 +44,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: '法務',
     items: [
       { href: '/houyou', label: '法要', icon: 'flame' },
+      { href: '/junkai', label: '巡回', icon: 'calendar-check' },
       { href: '/kukaku', label: '区画', icon: 'grid' },
     ],
   },

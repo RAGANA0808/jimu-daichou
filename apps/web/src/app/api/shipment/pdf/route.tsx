@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { renderToBuffer } from '@react-pdf/renderer';
-import { requireCurrentTenantId } from '@/lib/auth';
+import { requireCapability } from '@/lib/auth';
+import { recordAudit } from '@/lib/audit';
 import { withTenant } from '@/lib/db';
 import { findLabelSheetSpec, parseLocalDate, parseLocalDateTime } from '@/lib/shipment';
 import { listShipmentCandidatesForYear } from '@/features/shipment/queries';
@@ -54,7 +55,19 @@ export async function GET(request: NextRequest): Promise<Response> {
     return NextResponse.json({ error: 'invalid_year' }, { status: 400 });
   }
 
-  const tenantId = await requireCurrentTenantId();
+  const user = await requireCapability('export');
+  const tenantId = user.tenantId;
+
+  // 宛名 (氏名・住所) の一括持出。成功した書出のみ EXPORT 記録 (PII は summary 非載)。
+  const auditExport = (summary: string) =>
+    withTenant(tenantId, (tx) =>
+      recordAudit(tx, tenantId, {
+        actorId: user.id,
+        action: 'EXPORT',
+        entityType: 'Export',
+        summary,
+      }),
+    );
 
   const candidates = await listShipmentCandidatesForYear(year);
   if (candidates.length === 0) {
@@ -85,6 +98,7 @@ export async function GET(request: NextRequest): Promise<Response> {
       })),
     };
     const buffer = await renderToBuffer(<AddressLabelPdf data={data} />);
+    await auditExport(`宛名ラベル PDF 書出 (${year}年, ${candidates.length}件)`);
     return pdfResponse(buffer, `宛名ラベル_${year}年.pdf`);
   }
 
@@ -102,6 +116,7 @@ export async function GET(request: NextRequest): Promise<Response> {
       })),
     };
     const buffer = await renderToBuffer(<EnvelopePdf data={data} />);
+    await auditExport(`封筒宛名 PDF 書出 (${year}年, ${candidates.length}件)`);
     return pdfResponse(buffer, `封筒宛名_${year}年.pdf`);
   }
 
@@ -125,5 +140,6 @@ export async function GET(request: NextRequest): Promise<Response> {
     })),
   };
   const buffer = await renderToBuffer(<MergedNoticeLetterPdf data={data} />);
+  await auditExport(`案内状 PDF 書出 (${year}年, ${candidates.length}件)`);
   return pdfResponse(buffer, `案内状_${year}年.pdf`);
 }

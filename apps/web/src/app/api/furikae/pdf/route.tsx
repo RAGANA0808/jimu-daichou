@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { renderToBuffer } from '@react-pdf/renderer';
-import { requireCurrentTenantId } from '@/lib/auth';
-import { isValidUuid } from '@/lib/db';
+import { requireCapability } from '@/lib/auth';
+import { recordAudit } from '@/lib/audit';
+import { isValidUuid, withTenant } from '@/lib/db';
 import {
   buildPostalSlip,
   clampOffsetMm,
@@ -54,7 +55,8 @@ export async function GET(request: NextRequest): Promise<Response> {
   const showGuide = sp.get('guide') === '1';
   const householdIdParam = sp.get('householdId');
 
-  await requireCurrentTenantId();
+  const user = await requireCapability('export');
+  const tenantId = user.tenantId;
 
   const [account, subjectsRaw] = await Promise.all([
     getPostalTransferAccount(),
@@ -170,6 +172,17 @@ export async function GET(request: NextRequest): Promise<Response> {
     const filename = householdIdParam
       ? `郵便振替_${slips[0]!.householderName}_${year}年.pdf`
       : `郵便振替_一括_${year}年.pdf`;
+    // 成功した書出のみ EXPORT 記録。個人情報 (氏名・住所) は summary に載せない。
+    await withTenant(tenantId, (tx) =>
+      recordAudit(tx, tenantId, {
+        actorId: user.id,
+        action: 'EXPORT',
+        entityType: 'Export',
+        summary: `郵便振替 PDF 書出 (${year}年, ${
+          householdIdParam ? '単票' : '一括'
+        }, ${slips.length}件)`,
+      }),
+    );
     return pdfResponse(buffer, filename);
   } catch {
     // 個人情報をログに残さないため詳細はユーザーに返さない。

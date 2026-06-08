@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { renderToBuffer } from '@react-pdf/renderer';
-import { requireCurrentTenantId } from '@/lib/auth';
+import { requireCapability } from '@/lib/auth';
+import { recordAudit } from '@/lib/audit';
 import { withTenant } from '@/lib/db';
 import { listDemandCandidates } from '@/features/bochi/queries';
 import {
@@ -43,7 +44,8 @@ export async function GET(request: NextRequest): Promise<Response> {
   }
   const round = parseRound(sp.get('round'));
 
-  const tenantId = await requireCurrentTenantId();
+  const user = await requireCapability('export');
+  const tenantId = user.tenantId;
 
   // 宛先はサーバ側で再抽出する (クライアント送信値は信用しない)。
   // 宛名を解決できる (契約世帯あり) 区画のみ催告状を出力する。
@@ -92,5 +94,14 @@ export async function GET(request: NextRequest): Promise<Response> {
   };
 
   const buffer = await renderToBuffer(<DemandLetterPdf data={data} />);
+  // 成功した書出のみ EXPORT 記録。個人情報 (氏名・住所) は summary に載せない。
+  await withTenant(tenantId, (tx) =>
+    recordAudit(tx, tenantId, {
+      actorId: user.id,
+      action: 'EXPORT',
+      entityType: 'Export',
+      summary: `墓地管理料催告状 PDF 書出 (${year}年度, 第${round}回, ${sendable.length}件)`,
+    }),
+  );
   return pdfResponse(buffer, `墓地管理料催告状_${year}年度_第${round}回.pdf`);
 }

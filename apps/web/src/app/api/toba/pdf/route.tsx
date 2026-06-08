@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { renderToBuffer } from '@react-pdf/renderer';
-import { requireCurrentTenantId } from '@/lib/auth';
+import { requireCapability } from '@/lib/auth';
+import { recordAudit } from '@/lib/audit';
 import { assertValidUuid, isValidUuid, withTenant } from '@/lib/db';
 import {
   TobaReadingListPdf,
@@ -22,7 +23,8 @@ export async function GET(request: NextRequest): Promise<Response> {
   }
   assertValidUuid(memorialServiceId, 'memorialServiceId');
 
-  const tenantId = await requireCurrentTenantId();
+  const user = await requireCapability('export');
+  const tenantId = user.tenantId;
 
   const result = await withTenant(tenantId, async (tx) => {
     const service = await tx.memorialService.findUnique({
@@ -73,6 +75,16 @@ export async function GET(request: NextRequest): Promise<Response> {
 
   const filename = `塔婆読上帳_${result.service.serviceName}.pdf`;
   const encodedFilename = encodeURIComponent(filename);
+
+  // 成功した書出のみ EXPORT 記録。個人情報 (氏名) は summary に載せない。
+  await withTenant(tenantId, (tx) =>
+    recordAudit(tx, tenantId, {
+      actorId: user.id,
+      action: 'EXPORT',
+      entityType: 'Export',
+      summary: `塔婆読上帳 PDF 書出 (memorialServiceId=${memorialServiceId}, ${result.tobas.length}件)`,
+    }),
+  );
 
   return new Response(new Uint8Array(pdfBuffer), {
     status: 200,

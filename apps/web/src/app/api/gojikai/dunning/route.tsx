@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { renderToBuffer } from '@react-pdf/renderer';
-import { requireCurrentTenantId } from '@/lib/auth';
+import { requireCapability } from '@/lib/auth';
+import { recordAudit } from '@/lib/audit';
 import { withTenant } from '@/lib/db';
 import { listDunningCandidatesForYear } from '@/features/gojikai/queries';
 import {
@@ -37,7 +38,8 @@ export async function GET(request: NextRequest): Promise<Response> {
     return NextResponse.json({ error: 'invalid_year' }, { status: 400 });
   }
 
-  const tenantId = await requireCurrentTenantId();
+  const user = await requireCapability('export');
+  const tenantId = user.tenantId;
 
   // 宛先はサーバ側で再抽出する (クライアント送信値は信用しない)。
   const candidates = await listDunningCandidatesForYear(year);
@@ -80,5 +82,14 @@ export async function GET(request: NextRequest): Promise<Response> {
   };
 
   const buffer = await renderToBuffer(<DunningLetterPdf data={data} />);
+  // 成功した書出のみ EXPORT 記録。個人情報 (氏名・住所) は summary に載せない。
+  await withTenant(tenantId, (tx) =>
+    recordAudit(tx, tenantId, {
+      actorId: user.id,
+      action: 'EXPORT',
+      entityType: 'Export',
+      summary: `護持会費督促状 PDF 書出 (${year}年度, ${candidates.length}件)`,
+    }),
+  );
   return pdfResponse(buffer, `護持会費督促状_${year}年度.pdf`);
 }

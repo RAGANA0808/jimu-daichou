@@ -20,7 +20,7 @@ export type DeathLedgerListItem = DeathLedgerEntry & {
   };
 };
 
-export type DeathLedgerSort = 'date' | 'kana';
+export type DeathLedgerSort = 'date' | 'kana' | 'kaimyo';
 
 const CROSS_LIST_INCLUDE = {
   person: {
@@ -146,6 +146,23 @@ export async function listAllDeathLedgerEntries(options?: {
     return entries.sort((a, b) =>
       a.person.nameKana.localeCompare(b.person.nameKana, 'ja'),
     );
+  }
+
+  if (sort === 'kaimyo') {
+    // 戒名順 (五十音)。戒名未登録 (null/空) は末尾へ回し、同戒名はふりがなで安定化。
+    return entries.sort((a, b) => {
+      const ka = a.kaimyoName ?? '';
+      const kb = b.kaimyoName ?? '';
+      if (ka === '' && kb === '') {
+        return a.person.nameKana.localeCompare(b.person.nameKana, 'ja');
+      }
+      if (ka === '') return 1;
+      if (kb === '') return -1;
+      return (
+        ka.localeCompare(kb, 'ja') ||
+        a.person.nameKana.localeCompare(b.person.nameKana, 'ja')
+      );
+    });
   }
 
   return entries.sort((a, b) => {

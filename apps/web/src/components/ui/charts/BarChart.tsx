@@ -59,6 +59,8 @@ export function BarChart({
         className="h-auto w-full"
         preserveAspectRatio="xMidYMid meet"
       >
+        {/* 装飾的なグラフィック。数値は併設 sr-only テーブルに集約し AT には重複読み上げさせない。 */}
+        <g aria-hidden="true">
         {/* 0 基線 */}
         <line
           x1={PAD_X}
@@ -110,6 +112,7 @@ export function BarChart({
             </g>
           );
         })}
+        </g>
       </svg>
 
       <table className="sr-only">

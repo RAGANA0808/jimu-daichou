@@ -77,6 +77,8 @@ export function LineChart({
         className="h-auto w-full"
         preserveAspectRatio="xMidYMid meet"
       >
+        {/* 装飾的なグラフィック。数値は併設 sr-only テーブルに集約し AT には重複読み上げさせない。 */}
+        <g aria-hidden="true">
         {zeroInRange && (
           <line
             x1={PAD_X}
@@ -139,6 +141,7 @@ export function LineChart({
             </g>
           );
         })}
+        </g>
       </svg>
 
       <table className="sr-only">

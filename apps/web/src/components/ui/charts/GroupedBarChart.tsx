@@ -136,6 +136,8 @@ export function GroupedBarChart({
             <circle cx="3" cy="3" r="1.2" fill="rgba(255,255,255,0.8)" />
           </pattern>
         </defs>
+        {/* 装飾的なグラフィック。数値は併設 sr-only テーブルに集約し AT には重複読み上げさせない。 */}
+        <g aria-hidden="true">
         <line
           x1={PAD_X}
           y1={baseline}
@@ -209,6 +211,7 @@ export function GroupedBarChart({
             </g>
           );
         })}
+        </g>
       </svg>
 
       <table className="sr-only">

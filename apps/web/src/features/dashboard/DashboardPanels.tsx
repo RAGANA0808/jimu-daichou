@@ -9,6 +9,7 @@ import {
   EmptyState,
 } from '@/components/ui';
 import { INTERACTION_KIND_BADGE_VARIANT, INTERACTION_KIND_LABELS } from '@/features/danshintoto/interaction-types';
+import { SUCCESSION_REASON_LABELS } from '@/features/danshintoto/succession-types';
 import type { DashboardData } from './queries';
 import {
   formatJaDateTime,
@@ -303,6 +304,74 @@ export function KyoshiCandidatesPanel({
           >
             合祀候補をすべて見る（{kyoshi.count} 件）
           </Link>
+        </CardFooter>
+      )}
+    </Card>
+  );
+}
+
+export function PendingSuccessionsPanel({
+  pendingSuccessions,
+}: {
+  pendingSuccessions: DashboardData['pendingSuccessions'];
+}) {
+  const { count, top } = pendingSuccessions;
+  return (
+    <Card className="flex flex-col">
+      <CardHeader className="flex flex-row items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <CardTitle>承継の承認待ち</CardTitle>
+          {count > 0 ? (
+            <Badge variant="warning">{count} 件</Badge>
+          ) : (
+            <Badge variant="success">なし</Badge>
+          )}
+        </div>
+        <Link href="/danshintoto" className="text-sm text-info hover:underline">
+          檀信徒カルテ
+        </Link>
+      </CardHeader>
+      <CardContent className="flex-1">
+        {count === 0 ? (
+          <EmptyState
+            title="承認待ちの承継はありません"
+            description="お亡くなり等を記録すると承継候補が起票され、こちらで承認をお願いします。"
+          />
+        ) : (
+          <ul className="divide-y divide-border">
+            {top.map((s) => (
+              <li
+                key={s.id}
+                className="flex items-center justify-between gap-3 py-2"
+              >
+                <div className="min-w-0">
+                  <Link
+                    href={`/danshintoto/${s.householdId}`}
+                    className="truncate font-medium text-foreground hover:underline"
+                  >
+                    {s.householderName} 家
+                  </Link>
+                  <p className="truncate text-sm text-muted-foreground">
+                    {s.previousHouseholderName ?? '前施主'} →{' '}
+                    {s.nextHouseholderName ?? '次施主 未定'}
+                  </p>
+                </div>
+                <div className="shrink-0 text-right text-sm text-muted-foreground">
+                  <Badge variant="neutral" className="mb-1">
+                    {SUCCESSION_REASON_LABELS[s.reason]}
+                  </Badge>
+                  <p>{s.occurredAt ? formatJaDateUtc(s.occurredAt) : '日付不明'}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+      {count > top.length && (
+        <CardFooter className="py-2.5">
+          <span className="text-sm text-muted-foreground">
+            ほか {count - top.length} 件 ・ 各世帯のカルテで承認できます
+          </span>
         </CardFooter>
       )}
     </Card>

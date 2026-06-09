@@ -6,6 +6,7 @@ import { StatCardGrid } from '@/features/dashboard/StatCard';
 import {
   KyoshiCandidatesPanel,
   OutstandingPanel,
+  PendingSuccessionsPanel,
   RecentInteractionsPanel,
   UpcomingAnniversariesPanel,
   UpcomingServicesPanel,
@@ -30,6 +31,7 @@ export default async function DashboardPage() {
         <OutstandingPanel outstanding={data.outstanding} />
         <UpcomingAnniversariesPanel anniversaries={data.upcomingAnniversaries} />
         <KyoshiCandidatesPanel kyoshi={data.kyoshi} />
+        <PendingSuccessionsPanel pendingSuccessions={data.pendingSuccessions} />
       </div>
 
       <RecentInteractionsPanel notes={data.recentInteractions} />

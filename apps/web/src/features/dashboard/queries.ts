@@ -110,9 +110,16 @@ export type DashboardData = {
 };
 
 /**
- * ダッシュボードに必要なデータを並列取得する。
- * 各取得は対応する features の queries (すべて withTenant 経由) を集約するだけで、
- * ここでは直接 DB を触らない。
+ * ダッシュボードに必要なデータを取得する。
+ * 各取得は対応する features の queries (すべて withTenant 経由) を集約する。
+ *
+ * 接続プール枯渇 (問題A と同系統) を避けるため、全クエリを一度に並列実行せず
+ * 数本ずつのバッチに分けて取得し、同時に張る DB コネクションを束ねて抑える。
+ * 各クエリは withTenant=1 トランザクション=1 コネクションを占有するため、全並列だと
+ * Supabase pooler 上限 (15) や dev の connection_limit (10) に達しうる。バッチ化で
+ * peak 同時接続を ~4-5 に抑えつつ、バッチ内は並列を保ち応答速度の劣化を最小化する。
+ * (Prisma の対話 tx は単一接続上で直列実行になるため、単一 withTenant への完全集約は
+ *  ランディングページを直列化で遅くする。バッチ化が速度と接続数の両立に優る。)
  */
 export async function getDashboardData(
   now: Date = new Date(),
@@ -125,29 +132,28 @@ export async function getDashboardData(
   // 未収の年度起点は gojikai/bochi 各一覧ページと同じ算出 (暦年) に合わせる。
   const fiscalYear = currentFiscalYear(now);
 
-  const [
-    upcomingServices,
-    finance,
-    plots,
-    recentInteractions,
-    anniversaries,
-    gojikaiUnpaid,
-    bochiUnpaid,
-    kyoshiCandidates,
-    pendingSuccessions,
-    nextYearAnniversaryMatches,
-  ] = await Promise.all([
-    listUpcomingMemorialServices(),
-    getFinanceDashboardSummary(now),
-    countGravePlotsByStatus(),
-    listRecentInteractionNotes(8),
+  // バッチ 1: 法要 / 会計サマリ / 区画件数 / 対応履歴。
+  const [upcomingServices, finance, plots, recentInteractions] =
+    await Promise.all([
+      listUpcomingMemorialServices(),
+      getFinanceDashboardSummary(now),
+      countGravePlotsByStatus(),
+      listRecentInteractionNotes(8),
+    ]);
+  // バッチ 2: 当年の年忌 / 未収 (護持会費・墓地)。
+  const [anniversaries, gojikaiUnpaid, bochiUnpaid] = await Promise.all([
     findAnniversariesForYear(year),
     listDunningCandidatesForYear(fiscalYear),
     listDemandCandidates(fiscalYear),
-    listKyoshiCandidates({ withinMonths: 12, now }),
-    listPendingSuccessions(50),
-    findAnniversariesForYear(year + 1),
   ]);
+  // バッチ 3: 合祀候補 / 承継の承認待ち / 来年の年忌。
+  // (年忌クエリ year/year+1 は別バッチに分け、内部コネクションの山を平準化する)
+  const [kyoshiCandidates, pendingSuccessions, nextYearAnniversaryMatches] =
+    await Promise.all([
+      listKyoshiCandidates({ withinMonths: 12, now }),
+      listPendingSuccessions(50),
+      findAnniversariesForYear(year + 1),
+    ]);
 
   const today = upcomingServices.filter(
     (s) => s.scheduledAt >= todayStart && s.scheduledAt < tomorrowStart,

@@ -29,6 +29,10 @@ import {
   listKyoshiCandidates,
   type KyoshiCandidate,
 } from '@/features/kukaku/expiry-queries';
+import {
+  listPendingSuccessions,
+  type PendingSuccession,
+} from '@/features/danshintoto/succession-queries';
 
 /**
  * JST の「今日 0:00」と当月の範囲を返す。
@@ -76,6 +80,12 @@ export type KyoshiSummary = {
   top: KyoshiCandidate[];
 };
 
+/** 承認待ちの承継候補サマリ。件数と上位数件 (交代発生日の新しい順)。 */
+export type PendingSuccessionsSummary = {
+  count: number;
+  top: PendingSuccession[];
+};
+
 export type DashboardData = {
   services: UpcomingServices;
   upcomingAnniversaries: UpcomingAnniversaries;
@@ -84,6 +94,7 @@ export type DashboardData = {
   recentInteractions: RecentInteractionNote[];
   outstanding: OutstandingSummary;
   kyoshi: KyoshiSummary;
+  pendingSuccessions: PendingSuccessionsSummary;
 };
 
 /**
@@ -110,6 +121,7 @@ export async function getDashboardData(
     gojikaiUnpaid,
     bochiUnpaid,
     kyoshiCandidates,
+    pendingSuccessions,
   ] = await Promise.all([
     listUpcomingMemorialServices(),
     getFinanceDashboardSummary(now),
@@ -119,6 +131,7 @@ export async function getDashboardData(
     listDunningCandidatesForYear(fiscalYear),
     listDemandCandidates(fiscalYear),
     listKyoshiCandidates({ withinMonths: 12, now }),
+    listPendingSuccessions(50),
   ]);
 
   const today = upcomingServices.filter(
@@ -164,6 +177,10 @@ export async function getDashboardData(
     kyoshi: {
       count: kyoshiCandidates.length,
       top: kyoshiCandidates.slice(0, 5),
+    },
+    pendingSuccessions: {
+      count: pendingSuccessions.length,
+      top: pendingSuccessions.slice(0, 5),
     },
   };
 }

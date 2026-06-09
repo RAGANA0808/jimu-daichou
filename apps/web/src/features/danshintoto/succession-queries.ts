@@ -1,5 +1,5 @@
 import 'server-only';
-import type { HouseholdSuccession } from '@prisma/client';
+import type { HouseholdSuccession, SuccessionReason } from '@prisma/client';
 import { requireCurrentTenantId } from '@/lib/auth';
 import { assertValidUuid, withTenant } from '@/lib/db';
 
@@ -43,4 +43,49 @@ export async function countPendingSuccessions(): Promise<number> {
   return withTenant(tenantId, (tx) =>
     tx.householdSuccession.count({ where: { status: 'PROPOSED' } }),
   );
+}
+
+/** ダッシュボードの「承継の承認待ち」気づき 1 件分。 */
+export type PendingSuccession = {
+  id: string;
+  householdId: string;
+  householderName: string;
+  previousHouseholderName: string | null;
+  nextHouseholderName: string | null;
+  reason: SuccessionReason;
+  /** 交代発生日 (死亡日等)。@db.Date のため UTC 0:00。月日不明は null。 */
+  occurredAt: Date | null;
+};
+
+/**
+ * テナント内の未承認の承継候補 (status=PROPOSED) を横断取得する。
+ * ダッシュボードの気づき用 (各行はカルテの承継承認へ遷移)。
+ *
+ * 並びは occurredAt (交代発生日=死亡日等) の降順固定。**updatedAt 等の「更新順」では
+ * 並べない** (せいざん JP7282407 の更新順ポータル回避線を維持)。
+ */
+export async function listPendingSuccessions(
+  limit = 50,
+): Promise<PendingSuccession[]> {
+  const tenantId = await requireCurrentTenantId();
+  const rows = await withTenant(tenantId, (tx) =>
+    tx.householdSuccession.findMany({
+      where: { status: 'PROPOSED' },
+      include: { household: { select: { id: true, householderName: true } } },
+      orderBy: [
+        { occurredAt: { sort: 'desc', nulls: 'last' } },
+        { createdAt: 'desc' },
+      ],
+      take: limit,
+    }),
+  );
+  return rows.map((s) => ({
+    id: s.id,
+    householdId: s.householdId,
+    householderName: s.household.householderName,
+    previousHouseholderName: s.previousHouseholderName,
+    nextHouseholderName: s.nextHouseholderName,
+    reason: s.reason,
+    occurredAt: s.occurredAt,
+  }));
 }

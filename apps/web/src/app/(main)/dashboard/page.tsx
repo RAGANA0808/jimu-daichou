@@ -29,7 +29,10 @@ export default async function DashboardPage() {
       <div className="grid gap-4 xl:grid-cols-3">
         <UpcomingServicesPanel services={data.services} />
         <OutstandingPanel outstanding={data.outstanding} />
-        <UpcomingAnniversariesPanel anniversaries={data.upcomingAnniversaries} />
+        <UpcomingAnniversariesPanel
+          anniversaries={data.upcomingAnniversaries}
+          nextYear={data.nextYearAnniversaries}
+        />
         <KyoshiCandidatesPanel kyoshi={data.kyoshi} />
         <PendingSuccessionsPanel pendingSuccessions={data.pendingSuccessions} />
       </div>

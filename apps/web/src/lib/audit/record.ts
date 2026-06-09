@@ -17,6 +17,8 @@ import type { AuditAction, Prisma } from '@prisma/client';
 export type AuditEntityType =
   | 'Household'
   | 'Person'
+  | 'InteractionNote'
+  | 'ContactPoint'
   | 'DeathLedgerEntry'
   | 'MemorialService'
   | 'Toba'

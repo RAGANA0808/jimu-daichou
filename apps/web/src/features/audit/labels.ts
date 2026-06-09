@@ -21,6 +21,8 @@ export function auditActionLabel(action: AuditAction): string {
 export const AUDIT_ENTITY_LABELS: Record<string, string> = {
   Household: '世帯',
   Person: '家族構成員',
+  InteractionNote: '対応履歴',
+  ContactPoint: '連絡先',
   DeathLedgerEntry: '過去帳',
   MemorialService: '法要',
   Toba: '塔婆',

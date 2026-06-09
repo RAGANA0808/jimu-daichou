@@ -102,6 +102,11 @@ export default async function HouseholdDetailPage({
   if (!household) {
     notFound();
   }
+  // 接続プール枯渇 (問題A) 対策: このカルテ詳細は多数の世帯別クエリを引く。
+  // 各クエリは withTenant=1 トランザクション=1 コネクションを占有するため、全件を
+  // 一度に Promise.all すると Supabase pooler の上限 (15) を超えて EMAXCONNSESSION で
+  // 落ちうる。一度に張るコネクションを抑えるため 6 本ずつのバッチに分けて取得する
+  // (順序は無関係な読み取りのみ)。根治策の「単一 withTenant への集約」は将来対応。
   const [
     deathLedgerEntries,
     memorialServices,
@@ -109,16 +114,6 @@ export default async function HouseholdDetailPage({
     gravePlots,
     householdBurials,
     transactions,
-    interactionNotes,
-    feePlan,
-    feeInvoices,
-    assignedTags,
-    allTags,
-    contactPoints,
-    successions,
-    documents,
-    timelineItems,
-    sectDefaultCutoff,
   ] = await Promise.all([
     listDeathLedgerEntriesByHousehold(household.id),
     listMemorialServicesByHousehold(household.id),
@@ -126,17 +121,29 @@ export default async function HouseholdDetailPage({
     listGravePlotsByHousehold(household.id),
     listBurialsByHousehold(household.id),
     listTransactionsByHousehold(household.id),
+  ]);
+  const [
+    interactionNotes,
+    feePlan,
+    feeInvoices,
+    assignedTags,
+    allTags,
+    contactPoints,
+  ] = await Promise.all([
     listInteractionNotesByHousehold(household.id),
     getFeePlanByHousehold(household.id),
     listInvoicesByHousehold(household.id),
     listHouseholdTags(household.id),
     listTags(),
     listContactPointsByHousehold(household.id),
-    listSuccessionsByHousehold(household.id),
-    listDocumentsByHousehold(household.id),
-    buildHouseholdTimeline(household.id),
-    getCurrentTenantSectDefaultCutoff(),
   ]);
+  const [successions, documents, timelineItems, sectDefaultCutoff] =
+    await Promise.all([
+      listSuccessionsByHousehold(household.id),
+      listDocumentsByHousehold(household.id),
+      buildHouseholdTimeline(household.id),
+      getCurrentTenantSectDefaultCutoff(),
+    ]);
 
   // UI 補助: 役割で操作ボタンの出し分けをする (サーバ側 requireCapability が本丸)。
   const role = await getCurrentRole();

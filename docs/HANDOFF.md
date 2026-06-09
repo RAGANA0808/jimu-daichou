@@ -47,8 +47,9 @@
 - **PR #1**（基盤+PII+T-4+O-2/O-3）/ **PR #2**（T-2）→ **両方 MERGED**。main = `6db7060`（PR #1/#2 反映+引き継ぎメモの docs コミット）。マージ済みブランチは削除済み。
 - **PR #3**（`wave/analytics-trends`: ANALYTICS-LATER 経年トレンド分析）→ **MERGED**。
 - **PR #4**（`fix/karte-connection-pool`: 問題A 緩和=カルテ詳細のクエリをバッチ分割）→ **MERGED**。
-- **PR #5/#7**（docs 反映）/ **PR #6**（年忌「あと◯年」）/ **PR #8**（過去帳 戒名順ソート）/ **PR #9**（チャート a11y: 装飾SVGを aria-hidden 集約）→ すべて **MERGED**。
-- 現在 **main = `a70cab8`**（PR #9 反映）。マージ済みブランチは local/remote とも削除済み・tree クリーン。
+- **PR #5/#7/#10**（docs 反映）/ **PR #6**（年忌「あと◯年」）/ **PR #8**（過去帳 戒名順ソート）/ **PR #9**（チャート a11y: 装飾SVGを aria-hidden 集約）/ **PR #11**（ダッシュボードに「承継の承認待ち」パネル）→ すべて **MERGED**。
+- 現在 **main = `2e46d62`**（PR #11 反映）。マージ済みブランチは local/remote とも削除済み・tree クリーン。
+- **「気づき」ビューはダッシュボード(`/dashboard`)が担う**（説明文「本日の気づきをまとめています」）。パネル: 今後の法要 / 未収(護持会費+墓地) / 直近の年忌 / 合祀移行(=GraveContract 満了) / **承継の承認待ち(PR #11 で追加)** / 最近の対応履歴。新たな気づきは原則この既存コックピットへパネル追加で足す(別ページを作らない=重複回避)。
 - **直 main への commit/push は auto classifier が却下する**（PR 経由必須）。docs 更新も小さなブランチ→PR→merge で通す。
 - リモート: `github.com/RAGANA0808/jimu-daichou`。`gh` CLI 利用可。
 - **次ウェーブからも `main` を最新化してから feature ブランチを切る**。

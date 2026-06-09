@@ -23,61 +23,109 @@ export function UpcomingServicesPanel({
 }: {
   services: DashboardData['services'];
 }) {
-  const shown = services.thisMonth.slice(0, 5);
+  const shownThis = services.thisMonth.slice(0, 5);
+  const shownNext = services.nextMonth.slice(0, 3);
+  const hasAny = services.thisMonth.length > 0 || services.nextMonth.length > 0;
   return (
     <Card className="flex flex-col">
       <CardHeader className="flex flex-row items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <CardTitle>今後の法要</CardTitle>
           {services.thisMonth.length > 0 && (
-            <Badge variant="brand">{services.thisMonth.length} 件</Badge>
+            <Badge variant="brand">今月 {services.thisMonth.length} 件</Badge>
           )}
         </div>
         <Link href="/houyou" className="text-sm text-info hover:underline">
           一覧
         </Link>
       </CardHeader>
-      <CardContent className="flex-1">
-        {services.thisMonth.length === 0 ? (
+      <CardContent className="flex-1 space-y-4">
+        {!hasAny ? (
           <EmptyState
-            title="今月のご予定はありません"
+            title="今月・来月のご予定はありません"
             description="法要をご登録いただくと、こちらに表示されます。"
           />
         ) : (
-          <ul className="divide-y divide-border">
-            {shown.map((s) => {
-              const isToday = services.today.some((t) => t.id === s.id);
-              return (
-                <li key={s.id} className="flex items-center justify-between gap-3 py-2">
-                  <div className="min-w-0">
-                    <p className="truncate font-medium text-foreground">
-                      {s.serviceName}
-                    </p>
-                    <p className="truncate text-sm text-muted-foreground">
-                      {s.household.householderName} 家
-                      {s.location ? ` ・ ${s.location}` : ''}
-                    </p>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    {isToday && (
-                      <Badge variant="warning" className="mb-1">
-                        本日
-                      </Badge>
-                    )}
-                    <p className="text-sm text-muted-foreground">
-                      {formatJaDateTime(s.scheduledAt)}
-                    </p>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+          <>
+            <section>
+              <p className="mb-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                今月
+              </p>
+              {services.thisMonth.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  今月のご予定はありません。
+                </p>
+              ) : (
+                <ul className="divide-y divide-border">
+                  {shownThis.map((s) => {
+                    const isToday = services.today.some((t) => t.id === s.id);
+                    return (
+                      <li
+                        key={s.id}
+                        className="flex items-center justify-between gap-3 py-2"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate font-medium text-foreground">
+                            {s.serviceName}
+                          </p>
+                          <p className="truncate text-sm text-muted-foreground">
+                            {s.household.householderName} 家
+                            {s.location ? ` ・ ${s.location}` : ''}
+                          </p>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          {isToday && (
+                            <Badge variant="warning" className="mb-1">
+                              本日
+                            </Badge>
+                          )}
+                          <p className="text-sm text-muted-foreground">
+                            {formatJaDateTime(s.scheduledAt)}
+                          </p>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
+
+            {services.nextMonth.length > 0 && (
+              <section className="border-t border-border pt-3">
+                <p className="mb-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  来月 ・ {services.nextMonth.length} 件
+                </p>
+                <ul className="divide-y divide-border">
+                  {shownNext.map((s) => (
+                    <li
+                      key={s.id}
+                      className="flex items-center justify-between gap-3 py-2"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate font-medium text-foreground">
+                          {s.serviceName}
+                        </p>
+                        <p className="truncate text-sm text-muted-foreground">
+                          {s.household.householderName} 家
+                          {s.location ? ` ・ ${s.location}` : ''}
+                        </p>
+                      </div>
+                      <p className="shrink-0 text-right text-sm text-muted-foreground">
+                        {formatJaDateTime(s.scheduledAt)}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+          </>
         )}
       </CardContent>
-      {services.thisMonth.length > shown.length && (
+      {(services.thisMonth.length > shownThis.length ||
+        services.nextMonth.length > shownNext.length) && (
         <CardFooter className="py-2.5">
           <Link href="/houyou" className="text-sm font-medium text-info hover:underline">
-            すべて見る（{services.thisMonth.length} 件）
+            すべて見る
           </Link>
         </CardFooter>
       )}

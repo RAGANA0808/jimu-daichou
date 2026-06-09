@@ -42,6 +42,7 @@ function jstBounds(now: Date): {
   todayStart: Date;
   tomorrowStart: Date;
   monthEndExclusive: Date;
+  nextMonthEndExclusive: Date;
 } {
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const tomorrowStart = new Date(
@@ -50,7 +51,12 @@ function jstBounds(now: Date): {
     now.getDate() + 1,
   );
   const monthEndExclusive = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-  return { todayStart, tomorrowStart, monthEndExclusive };
+  const nextMonthEndExclusive = new Date(
+    now.getFullYear(),
+    now.getMonth() + 2,
+    1,
+  );
+  return { todayStart, tomorrowStart, monthEndExclusive, nextMonthEndExclusive };
 }
 
 export type UpcomingServices = {
@@ -58,6 +64,8 @@ export type UpcomingServices = {
   today: MemorialServiceWithHousehold[];
   /** 今月 (本日以降〜月末) の法要 */
   thisMonth: MemorialServiceWithHousehold[];
+  /** 来月 (翌月 1 日〜翌々月 1 日の手前) の法要。月末の見落とし防止の先回り表示用。 */
+  nextMonth: MemorialServiceWithHousehold[];
 };
 
 /** 当年で本日以降に予定日を迎える年忌 (近い順、上限つき)。 */
@@ -105,7 +113,8 @@ export type DashboardData = {
 export async function getDashboardData(
   now: Date = new Date(),
 ): Promise<DashboardData> {
-  const { todayStart, tomorrowStart, monthEndExclusive } = jstBounds(now);
+  const { todayStart, tomorrowStart, monthEndExclusive, nextMonthEndExclusive } =
+    jstBounds(now);
   const year = now.getFullYear();
   const month = now.getMonth() + 1;
   const day = now.getDate();
@@ -140,6 +149,12 @@ export async function getDashboardData(
   const thisMonth = upcomingServices.filter(
     (s) => s.scheduledAt >= todayStart && s.scheduledAt < monthEndExclusive,
   );
+  // 来月分は同じ取得結果 (本日以降 100 件) から窓を切るだけ。新規クエリは増やさない。
+  const nextMonth = upcomingServices.filter(
+    (s) =>
+      s.scheduledAt >= monthEndExclusive &&
+      s.scheduledAt < nextMonthEndExclusive,
+  );
 
   // 年忌のうち、当年で本日以降に予定日を迎えるものに絞る (月日不明は対象外)。
   const upcomingAnniversaries = anniversaries
@@ -168,7 +183,7 @@ export async function getDashboardData(
   };
 
   return {
-    services: { today, thisMonth },
+    services: { today, thisMonth, nextMonth },
     upcomingAnniversaries,
     finance,
     plots,

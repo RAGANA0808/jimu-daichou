@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { requireCapability } from '@/lib/auth';
 import { assertValidUuid, withTenant } from '@/lib/db';
+import { recordAudit } from '@/lib/audit/record';
 import {
   normalizePhoneForStorage,
   normalizePostalCode,
@@ -108,7 +109,8 @@ export async function createContactPointAction(
   }
   const personId = readOptionalPersonId(formData);
 
-  const tenantId = (await requireCapability('create')).tenantId;
+  const user = await requireCapability('create');
+  const tenantId = user.tenantId;
   await withTenant(tenantId, async (tx) => {
     const household = await tx.household.findUnique({
       where: { id: householdId },
@@ -126,7 +128,7 @@ export async function createContactPointAction(
     });
     const nextOrder = (last?.sortOrder ?? -1) + 1;
 
-    await tx.contactPoint.create({
+    const created = await tx.contactPoint.create({
       data: {
         tenantId,
         householdId,
@@ -135,6 +137,14 @@ export async function createContactPointAction(
         ...toPrismaData(values),
       },
       select: { id: true },
+    });
+    // 監査: 氏名・続柄ラベル等は PII のため載せない (id のみ)。
+    await recordAudit(tx, tenantId, {
+      actorId: user.id,
+      action: 'CREATE',
+      entityType: 'ContactPoint',
+      entityId: created.id,
+      summary: '連絡先を追加',
     });
   });
 
@@ -161,7 +171,8 @@ export async function updateContactPointAction(
   }
   const personId = readOptionalPersonId(formData);
 
-  const tenantId = (await requireCapability('update')).tenantId;
+  const user = await requireCapability('update');
+  const tenantId = user.tenantId;
   await withTenant(tenantId, async (tx) => {
     const existing = await tx.contactPoint.findFirst({
       where: { id: contactPointId, householdId, deletedAt: null },
@@ -173,6 +184,13 @@ export async function updateContactPointAction(
     await tx.contactPoint.update({
       where: { id: contactPointId },
       data: { personId, ...toPrismaData(values) },
+    });
+    await recordAudit(tx, tenantId, {
+      actorId: user.id,
+      action: 'UPDATE',
+      entityType: 'ContactPoint',
+      entityId: contactPointId,
+      summary: '連絡先を編集',
     });
   });
 
@@ -191,7 +209,8 @@ export async function deleteContactPointAction(
   const contactPointId = readField(formData, 'contactPointId');
   assertValidUuid(contactPointId, 'contactPointId');
 
-  const tenantId = (await requireCapability('softDelete')).tenantId;
+  const user = await requireCapability('softDelete');
+  const tenantId = user.tenantId;
   await withTenant(tenantId, async (tx) => {
     const existing = await tx.contactPoint.findFirst({
       where: { id: contactPointId, householdId },
@@ -200,15 +219,26 @@ export async function deleteContactPointAction(
     if (!existing) {
       throw new Error('対象の連絡先が見つかりませんでした。');
     }
-    if (existing.deletedAt !== null) return; // 冪等
+    if (existing.deletedAt !== null) return; // 冪等 (既に除外済みは監査も追記しない)
     await tx.contactPoint.update({
       where: { id: contactPointId },
       data: { deletedAt: new Date() },
+    });
+    await recordAudit(tx, tenantId, {
+      actorId: user.id,
+      action: 'DELETE',
+      entityType: 'ContactPoint',
+      entityId: contactPointId,
+      summary: '連絡先を除外 (論理削除)',
     });
   });
 
   revalidatePath(`/danshintoto/${householdId}`);
 }
+
+// isPrimary / 並べ替え (toggleContactPointPrimary / reorderContactPoints) は
+// 表示上の目印・並び順の調整であり、連絡先の内容変更を伴わない軽微操作のため
+// 監査対象外とする (監査ログのノイズ回避)。
 
 /**
  * 主たる連絡先フラグ (isPrimary) のトグル。単なる目印で 1 件制約等は課さない。

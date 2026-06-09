@@ -4,6 +4,7 @@ import type { InteractionCategory, InteractionKind } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
 import { requireCapability } from '@/lib/auth';
 import { assertValidUuid, withTenant } from '@/lib/db';
+import { recordAudit } from '@/lib/audit/record';
 import {
   INTERACTION_CATEGORY_ORDER,
   INTERACTION_KIND_ORDER,
@@ -167,8 +168,8 @@ export async function createInteractionNoteAction(
     };
   }
 
-  await withTenant(tenantId, (tx) =>
-    tx.interactionNote.create({
+  await withTenant(tenantId, async (tx) => {
+    const created = await tx.interactionNote.create({
       data: {
         tenantId,
         householdId,
@@ -180,8 +181,16 @@ export async function createInteractionNoteAction(
         occurredAt: v.occurredAt!,
       },
       select: { id: true },
-    }),
-  );
+    });
+    // 監査: 本文 (content) は PII のため載せない。種別・話題 (enum) のみ。
+    await recordAudit(tx, tenantId, {
+      actorId: user.id,
+      action: 'CREATE',
+      entityType: 'InteractionNote',
+      entityId: created.id,
+      summary: `対応履歴を登録 (種別=${v.kind}, 話題=${v.category})`,
+    });
+  });
 
   revalidatePath(`/danshintoto/${householdId}`);
   return { status: 'success' };
@@ -205,7 +214,8 @@ export async function updateInteractionNoteAction(
     return { status: 'error', errors: v.errors, values: toFormValues(values) };
   }
 
-  const tenantId = (await requireCapability('update')).tenantId;
+  const user = await requireCapability('update');
+  const tenantId = user.tenantId;
 
   await withTenant(tenantId, async (tx) => {
     const existing = await tx.interactionNote.findFirst({
@@ -225,6 +235,13 @@ export async function updateInteractionNoteAction(
         occurredAt: v.occurredAt!,
       },
     });
+    await recordAudit(tx, tenantId, {
+      actorId: user.id,
+      action: 'UPDATE',
+      entityType: 'InteractionNote',
+      entityId: id,
+      summary: `対応履歴を編集 (種別=${v.kind}, 話題=${v.category})`,
+    });
   });
 
   revalidatePath(`/danshintoto/${householdId}`);
@@ -242,7 +259,8 @@ export async function softDeleteInteractionNoteAction(
   const householdId = readField(formData, 'householdId');
   assertValidUuid(householdId, 'householdId');
 
-  const tenantId = (await requireCapability('softDelete')).tenantId;
+  const user = await requireCapability('softDelete');
+  const tenantId = user.tenantId;
   await withTenant(tenantId, async (tx) => {
     const existing = await tx.interactionNote.findFirst({
       where: { id, deletedAt: null },
@@ -255,10 +273,20 @@ export async function softDeleteInteractionNoteAction(
       where: { id },
       data: { deletedAt: new Date() },
     });
+    await recordAudit(tx, tenantId, {
+      actorId: user.id,
+      action: 'DELETE',
+      entityType: 'InteractionNote',
+      entityId: id,
+      summary: '対応履歴を除外 (論理削除)',
+    });
   });
 
   revalidatePath(`/danshintoto/${householdId}`);
 }
+
+// ピン留めトグル (toggleInteractionNotePin) は表示上の固定の切替であり
+// 内容変更を伴わない軽微操作のため監査対象外とする (監査ログのノイズ回避)。
 
 /**
  * 対応履歴のピン留め (固定) のトグル。フォーム値検証を伴わない軽量更新。

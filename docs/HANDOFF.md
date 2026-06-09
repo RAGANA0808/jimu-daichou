@@ -45,10 +45,12 @@
 ### Git / PR 運用（2026-06-09 開始）
 - ウェーブ(またはバッチ)ごとに feature ブランチ → PR、マージ前に security-review を1回挟む。
 - **PR #1**（基盤+PII+T-4+O-2/O-3）/ **PR #2**（T-2）→ **両方 MERGED**。main = `6db7060`（PR #1/#2 反映+引き継ぎメモの docs コミット）。マージ済みブランチは削除済み。
-- **PR #3**（`wave/analytics-trends`: ANALYTICS-LATER 経年トレンド分析）→ **OPEN・レビュー/security-review 済みでブロッカーなし・マージ可**: https://github.com/RAGANA0808/jimu-daichou/pull/3 。**次セッション冒頭でマージ → local main 同期 → ブランチ削除**。
+- **PR #3**（`wave/analytics-trends`: ANALYTICS-LATER 経年トレンド分析）→ **MERGED**。
+- **PR #4**（`fix/karte-connection-pool`: 問題A 緩和=カルテ詳細のクエリをバッチ分割）→ **MERGED**。
+- 現在 **main = `c1db5c7`**（PR #4 反映）。マージ済みブランチは local/remote とも削除済み・tree クリーン。
 - リモート: `github.com/RAGANA0808/jimu-daichou`。`gh` CLI 利用可。
-- **次ウェーブからも `main` を最新化してから feature ブランチを切る**（PR #3 マージ後）。
-- **次セッション最優先**: PR #3 をマージ後、残ロードマップ(OUTREACH-NOTIFY T-3/A-5 自動リマインド=独立フェーズ → L系 商用前FTO/商標)。
+- **次ウェーブからも `main` を最新化してから feature ブランチを切る**。
+- **次セッション最優先**: 残ロードマップ(OUTREACH-NOTIFY T-3/A-5 自動リマインド=独立フェーズ → L系 商用前FTO/商標)。任意の安価改善として問題A根治(選択肢3=単一withTenant集約)も候補。
 
 > **T-4 / O-2,O-3 とも実機 click-through 検証済み**。O-2 は宗派=浄土真宗で年忌バッジが33で打ち切り→未設定で全10回忌復帰(後方互換実証)、O-3 はウィザード4ステップ完走。**検証後テナント sect は元の未設定に復元済み**(実データ無変更)。test は 446 件(既存438+sect新規8)。
 
@@ -60,14 +62,15 @@
 
 ## 2. 既知の問題 / 保留事項（重要・最初に目を通す）
 
-### ❗ A. 接続プール枯渇（EMAXCONNSESSION）— **ユーザー判断で「Supabase Pro 化で後回し」決定済み**
+### ⚠️ A. 接続プール枯渇（EMAXCONNSESSION）— **2026-06-09 にページ側バッチ分割で緩和済み（PR #4）。根治(選択肢3)は将来ウェーブ**
 - **症状**: 名前検索 → 結果カルテへ遷移するとエラー（`EMAXCONNSESSION pool_size 15` / `22P02 invalid uuid ""`）。
-- **根本原因**: `withTenant` が **Prisma の対話トランザクション**を使い、1tx=1コネクション占有。檀信徒詳細ページ `app/(main)/danshintoto/[id]/page.tsx` が **~14個の withTenant クエリを Promise.all 並列実行**するため、Supabase セッションモード pooler の上限(15)を超える。
-- **暫定対策（適用済み）**: `apps/web/src/lib/db/client.ts` に **dev限定で `connection_limit=10&pool_timeout=20` を付与**（超過分はプール内で待たせ枯渇させない）。本番では上書きしない。
-- **恒久対策の選択肢**（どれか1つ）:
-  1. **Supabase Pro 化**（ユーザー希望・後回しでOK）。
-  2. **無料のまま**: `DATABASE_URL` を Supabase の **transaction モード pooler（port 6543）** に切替える（`?pgbouncer=true` 付与）。※対話トランザクションとの相性に注意。
-  3. 詳細ページのクエリを**1つの withTenant 内に集約**してコネクション占有を1本化（コード側の根治・最も筋が良い）。
+- **根本原因**: `withTenant` が **Prisma の対話トランザクション**を使い、1tx=1コネクション占有。檀信徒詳細ページ `app/(main)/danshintoto/[id]/page.tsx` が **16個の withTenant クエリを Promise.all 並列実行**するため、Supabase セッションモード pooler の上限(15)を超える。
+- **緩和（適用済み・PR #4 / `c1db5c7`）**: 詳細ページの 16 並列クエリを **6本ずつ3バッチに分割**（peak 同時接続 ≤6・取得結果は不変・実機全8タブ200確認）。これで prod でも上限に余裕。
+- **暫定対策（既存）**: `apps/web/src/lib/db/client.ts` に **dev限定で `connection_limit=10&pool_timeout=20`**（超過分を待たせ枯渇させない）。本番では上書きしない。
+- **根治の選択肢**（将来・どれか1つ）:
+  1. **詳細ページの全クエリを1つの withTenant 内に集約**してコネクション占有を1本化（**最も筋が良い・選択肢3**）。各 `*ByHousehold` クエリに optional `tx?: Prisma.TransactionClient` を通す ~14ファイルの改修。tenant-check は `'use server'` ファイルのみ検査するためクエリモジュール改変では壊れない。**ultracode の独立ウェーブ推奨**。
+  2. **Supabase Pro 化**（ユーザー希望・後回しでOK）。
+  3. **無料のまま**: `DATABASE_URL` を Supabase の **transaction モード pooler（port 6543）** に切替（`?pgbouncer=true`）。※対話トランザクションとの相性に注意。
 - **判断**: ユーザーは「Supabase を Pro にすることで解決するなら後回しでよい」と明言。**当面は触らなくてよい**が、選択肢3はコード品質的にいつかやる価値あり。
 
 ### ✅ B. 機能テスト（遷移・E2E）— **2026-06-08 に経路確立**

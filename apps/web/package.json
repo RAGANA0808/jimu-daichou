@@ -6,7 +6,7 @@
     "dev": "dotenv -e ../../.env -- next dev -p 3104",
     "build": "dotenv -e ../../.env -- cross-env NODE_ENV=production next build",
     "start": "dotenv -e ../../.env -- next start -p 3104",
-    "lint": "next lint",
+    "lint": "eslint . --max-warnings 0",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",

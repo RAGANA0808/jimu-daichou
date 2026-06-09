@@ -186,9 +186,14 @@ export default async function HouyouListPage() {
               今日以降の寺の年中行事です。
             </p>
           </div>
-          <Link href="/houyou/gyouji/new">
-            <Button>行事を登録</Button>
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link href="/houyou/torikomi">
+              <Button variant="secondary">カレンダーから取り込む</Button>
+            </Link>
+            <Link href="/houyou/gyouji/new">
+              <Button>行事を登録</Button>
+            </Link>
+          </div>
         </div>
 
         {templeEvents.length === 0 ? (

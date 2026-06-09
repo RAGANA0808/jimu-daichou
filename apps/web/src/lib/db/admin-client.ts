@@ -16,7 +16,6 @@ import { PrismaClient } from '@prisma/client';
  * このクライアント経由では RLS ポリシーは適用されない点に注意。
  */
 declare global {
-  // eslint-disable-next-line no-var
   var __adminPrisma: PrismaClient | undefined;
 }
 

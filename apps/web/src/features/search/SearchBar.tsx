@@ -5,6 +5,7 @@ import {
   useCallback,
   useEffect,
   useId,
+  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -84,7 +85,7 @@ export function SearchBar() {
   const containerRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  const flat = results ? flatten(results) : [];
+  const flat = useMemo(() => (results ? flatten(results) : []), [results]);
   const hasResults = flat.length > 0;
   const trimmed = query.trim();
 

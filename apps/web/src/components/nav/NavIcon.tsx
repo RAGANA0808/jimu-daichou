@@ -7,6 +7,7 @@ import type { SVGProps } from 'react';
  */
 export type NavIconName =
   | 'home'
+  | 'trending-up'
   | 'users'
   | 'book'
   | 'calendar-check'
@@ -28,6 +29,12 @@ const PATHS: Record<NavIconName, React.ReactNode> = {
       <path d="M3 10.5 12 3l9 7.5" />
       <path d="M5 9.5V20a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9.5" />
       <path d="M9.5 21v-6h5v6" />
+    </>
+  ),
+  'trending-up': (
+    <>
+      <path d="M3 17l6-6 4 4 7-7" />
+      <path d="M17 7h4v4" />
     </>
   ),
   users: (

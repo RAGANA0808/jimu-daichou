@@ -28,7 +28,10 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     id: 'top',
     label: null,
-    items: [{ href: '/dashboard', label: 'ダッシュボード', icon: 'home' }],
+    items: [
+      { href: '/dashboard', label: 'ダッシュボード', icon: 'home' },
+      { href: '/bunseki', label: '分析', icon: 'trending-up' },
+    ],
   },
   {
     id: 'karte',

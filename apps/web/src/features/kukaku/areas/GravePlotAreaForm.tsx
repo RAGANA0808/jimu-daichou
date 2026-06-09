@@ -46,7 +46,7 @@ function TextField({
   const value = state.values?.[name] ?? defaultValue ?? '';
   return (
     <div className="space-y-1">
-      <label htmlFor={name} className="block text-sm font-medium text-gray-700">
+      <label htmlFor={name} className="block text-sm font-medium text-foreground">
         {label}
         {required && <span className="ml-1 text-red-600">*</span>}
       </label>
@@ -59,10 +59,10 @@ function TextField({
         placeholder={placeholder}
         inputMode={type === 'number' ? 'numeric' : undefined}
         aria-invalid={error ? 'true' : undefined}
-        className="block w-full rounded border border-gray-300 px-3 py-2 text-base focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
+        className="block w-full rounded border border-border px-3 py-2 text-base focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
       />
       {helpText && !error && (
-        <p className="text-xs text-gray-500">{helpText}</p>
+        <p className="text-xs text-muted-foreground">{helpText}</p>
       )}
       {error && <p className="text-sm text-red-700">{error}</p>}
     </div>
@@ -132,13 +132,13 @@ export function GravePlotAreaForm({
         <button
           type="submit"
           disabled={isPending}
-          className="rounded bg-gray-900 px-4 py-2 text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-400"
+          className="inline-flex min-h-touch items-center rounded bg-brand px-4 py-2 font-medium text-brand-foreground transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isPending ? '保存中…' : submitLabel}
         </button>
         <Link
           href={cancelHref}
-          className="rounded border border-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-100"
+          className="rounded border border-border px-4 py-2 text-foreground hover:bg-muted"
         >
           キャンセル
         </Link>

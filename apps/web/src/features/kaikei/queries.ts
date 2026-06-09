@@ -7,6 +7,11 @@ import type {
 } from '@prisma/client';
 import { requireCurrentTenantId } from '@/lib/auth';
 import { assertValidUuid, withTenant } from '@/lib/db';
+import {
+  aggregateCrossTab,
+  fiscalYearRangeUtc,
+  type CrossTabResult,
+} from './crosstab';
 
 export type TransactionWithHousehold = Transaction & {
   household: Pick<Household, 'id' | 'householderName' | 'nameKana'> | null;
@@ -29,13 +34,21 @@ function jstYearRange(year: number): { from: Date; to: Date } {
   return { from, to };
 }
 
+/** 一覧の追加絞り込み (会計クロス集計のセルからの遷移で使用)。 */
+export type TransactionListFilter = {
+  direction?: TransactionDirection;
+  category?: TransactionCategory;
+};
+
 /**
  * 指定年月の入出金を paidAt 降順で取得する。
  * month を省略すると年全体。Phase 1 は 500 件上限 (1 ヶ月で 500 件超える運用は想定外)。
+ * filter で direction / category の絞り込みも可能 (集計ビューからの遷移)。
  */
 export async function listTransactionsByMonth(
   year: number,
   month?: number,
+  filter: TransactionListFilter = {},
 ): Promise<TransactionWithHousehold[]> {
   const tenantId = await requireCurrentTenantId();
   const { from, to } =
@@ -45,7 +58,11 @@ export async function listTransactionsByMonth(
 
   return withTenant(tenantId, (tx) =>
     tx.transaction.findMany({
-      where: { paidAt: { gte: from, lt: to } },
+      where: {
+        paidAt: { gte: from, lt: to },
+        ...(filter.direction ? { direction: filter.direction } : {}),
+        ...(filter.category ? { category: filter.category } : {}),
+      },
       include: {
         household: {
           select: { id: true, householderName: true, nameKana: true },
@@ -97,6 +114,73 @@ export async function getTransactionById(
       },
     }),
   );
+}
+
+export type FinanceDashboardSummary = {
+  /** 今月の収入合計 (円) */
+  monthIncome: number;
+  /** 今月の支出合計 (円) */
+  monthExpense: number;
+  /** 今月の差引 (円) */
+  monthNet: number;
+  /** 今年の護持会費 (MAINTENANCE_FEE) 入金件数 */
+  maintenanceFeeCountThisYear: number;
+  /** 今年の護持会費 入金合計 (円) */
+  maintenanceFeeTotalThisYear: number;
+};
+
+/**
+ * ダッシュボード用の会計サマリ。
+ * 護持会費台帳 (E07) は未実装のため、既存 Transaction から算出できる指標に留める。
+ * - 今月の収支
+ * - 今年の護持会費入金状況 (未納の網羅判定はできないが「集まり具合」の気づきになる)
+ */
+export async function getFinanceDashboardSummary(
+  now: Date = new Date(),
+): Promise<FinanceDashboardSummary> {
+  const tenantId = await requireCurrentTenantId();
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1;
+  const monthRange = jstMonthRange(year, month);
+  const yearRange = jstYearRange(year);
+
+  return withTenant(tenantId, async (tx) => {
+    const [monthIncomeAgg, monthExpenseAgg, feeAgg] = await Promise.all([
+      tx.transaction.aggregate({
+        _sum: { amount: true },
+        where: {
+          direction: 'INCOME',
+          paidAt: { gte: monthRange.from, lt: monthRange.to },
+        },
+      }),
+      tx.transaction.aggregate({
+        _sum: { amount: true },
+        where: {
+          direction: 'EXPENSE',
+          paidAt: { gte: monthRange.from, lt: monthRange.to },
+        },
+      }),
+      tx.transaction.aggregate({
+        _sum: { amount: true },
+        _count: { _all: true },
+        where: {
+          category: 'MAINTENANCE_FEE',
+          direction: 'INCOME',
+          paidAt: { gte: yearRange.from, lt: yearRange.to },
+        },
+      }),
+    ]);
+
+    const monthIncome = monthIncomeAgg._sum.amount ?? 0;
+    const monthExpense = monthExpenseAgg._sum.amount ?? 0;
+    return {
+      monthIncome,
+      monthExpense,
+      monthNet: monthIncome - monthExpense,
+      maintenanceFeeCountThisYear: feeAgg._count._all,
+      maintenanceFeeTotalThisYear: feeAgg._sum.amount ?? 0,
+    };
+  });
 }
 
 export type TransactionSummary = {
@@ -155,4 +239,33 @@ export function summarizeTransactions(
     net: income - expense,
     byCategory: Array.from(map.values()),
   };
+}
+
+/**
+ * 会計クロス集計 (E08): 指定会計年度 (4月始まり) の取引を 1 回取得し、
+ * 科目 × 会計月でクロス集計して返す。
+ *
+ * 月レンジは @db.Date (UTC 0:00 保存) に厳密一致させるため
+ * fiscalYearRangeUtc (Date.UTC ベース) で生成する。月軸のビン分けは
+ * 取得後に getUTCMonth() ベースの純関数 aggregateCrossTab で行う。
+ */
+export async function getCrossTabByFiscalYear(
+  fiscalYear: number,
+): Promise<CrossTabResult> {
+  const tenantId = await requireCurrentTenantId();
+  const { from, to } = fiscalYearRangeUtc(fiscalYear);
+
+  const txs = await withTenant(tenantId, (tx) =>
+    tx.transaction.findMany({
+      where: { paidAt: { gte: from, lt: to } },
+      select: {
+        direction: true,
+        category: true,
+        amount: true,
+        paidAt: true,
+      },
+    }),
+  );
+
+  return aggregateCrossTab(txs, fiscalYear);
 }

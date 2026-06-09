@@ -1,7 +1,14 @@
 import 'server-only';
-import type { GravePlot, GravePlotArea, Household } from '@prisma/client';
+import type {
+  GravePlot,
+  GravePlotArea,
+  GravePlotStatus,
+  Household,
+  Prisma,
+} from '@prisma/client';
 import { requireCurrentTenantId } from '@/lib/auth';
 import { assertValidUuid, withTenant } from '@/lib/db';
+import { GRAVE_PLOT_VACANT_STATUSES } from './types';
 
 export type GravePlotWithRelations = GravePlot & {
   household: Pick<Household, 'id' | 'householderName'> | null;
@@ -11,13 +18,22 @@ export type GravePlotWithRelations = GravePlot & {
 /**
  * 区画一覧。plotNumber 昇順。
  * 離檀した世帯の区画でも household が null になる場合あり (FK は維持)。
+ * status 絞り込み (空き区画検索 G-7 等) も任意で受ける。
  */
 export async function listGravePlots(options?: {
   areaId?: string | null;
+  status?: GravePlotStatus | GravePlotStatus[];
 }): Promise<GravePlotWithRelations[]> {
   const tenantId = await requireCurrentTenantId();
-  const where =
-    options && 'areaId' in options ? { areaId: options.areaId ?? null } : {};
+  const where: Prisma.GravePlotWhereInput = {};
+  if (options && 'areaId' in options) {
+    where.areaId = options.areaId ?? null;
+  }
+  if (options?.status !== undefined) {
+    where.status = Array.isArray(options.status)
+      ? { in: options.status }
+      : options.status;
+  }
   return withTenant(tenantId, (tx) =>
     tx.gravePlot.findMany({
       where,
@@ -28,6 +44,18 @@ export async function listGravePlots(options?: {
       orderBy: { plotNumber: 'asc' },
     }),
   );
+}
+
+/**
+ * 空き区画一覧 (G-7)。実質空き (GRAVE_PLOT_VACANT_STATUSES) のみを返す。
+ */
+export async function listAvailableGravePlots(options?: {
+  areaId?: string | null;
+}): Promise<GravePlotWithRelations[]> {
+  return listGravePlots({
+    ...(options && 'areaId' in options ? { areaId: options.areaId ?? null } : {}),
+    status: GRAVE_PLOT_VACANT_STATUSES,
+  });
 }
 
 /**
@@ -49,6 +77,70 @@ export async function listGravePlotsByHousehold(
       orderBy: { plotNumber: 'asc' },
     }),
   );
+}
+
+export type GravePlotStatusCounts = {
+  available: number;
+  inUse: number;
+  reserved: number;
+  closed: number;
+  overdue: number;
+  unclaimed: number;
+  interredTogether: number;
+  total: number;
+};
+
+/**
+ * ダッシュボード用: 区画ステータスごとの件数を集計する。
+ * 空き区画数 (status=AVAILABLE) を中心に「気づき」へつなぐ。
+ */
+export async function countGravePlotsByStatus(): Promise<GravePlotStatusCounts> {
+  const tenantId = await requireCurrentTenantId();
+  const grouped = await withTenant(tenantId, (tx) =>
+    tx.gravePlot.groupBy({
+      by: ['status'],
+      _count: { _all: true },
+    }),
+  );
+
+  const counts: GravePlotStatusCounts = {
+    available: 0,
+    inUse: 0,
+    reserved: 0,
+    closed: 0,
+    overdue: 0,
+    unclaimed: 0,
+    interredTogether: 0,
+    total: 0,
+  };
+  for (const g of grouped) {
+    const n = g._count._all;
+    counts.total += n;
+    switch (g.status) {
+      case 'AVAILABLE':
+        counts.available = n;
+        break;
+      case 'IN_USE':
+        counts.inUse = n;
+        break;
+      case 'RESERVED':
+        counts.reserved = n;
+        break;
+      case 'CLOSED':
+        counts.closed = n;
+        break;
+      case 'OVERDUE':
+        counts.overdue = n;
+        break;
+      case 'UNCLAIMED':
+        counts.unclaimed = n;
+        break;
+      case 'INTERRED_TOGETHER':
+        counts.interredTogether = n;
+        break;
+    }
+  }
+  return counts;
 }
 
 export async function getGravePlotById(

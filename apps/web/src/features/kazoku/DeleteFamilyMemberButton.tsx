@@ -30,7 +30,7 @@ export function DeleteFamilyMemberButton({ personId, personName }: Props) {
       <input type="hidden" name="personId" value={personId} />
       <button
         type="submit"
-        className="rounded border border-red-300 bg-white px-4 py-2 text-sm text-red-800 hover:bg-red-100"
+        className="rounded border border-red-300 bg-surface px-4 py-2 text-sm text-red-800 hover:bg-red-100"
       >
         この家族構成員を削除する
       </button>

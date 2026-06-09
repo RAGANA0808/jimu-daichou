@@ -30,12 +30,19 @@ export async function getCurrentUser(): Promise<User | null> {
 
 /**
  * ログイン必須の Server Action / Server Component の入口で使う。
- * 未ログインなら例外を投げる。
+ * 未ログイン、または無効化 (isActive=false) されたユーザーなら例外を投げる。
+ *
+ * 【締め出し厳禁との整合】最後の有効な HEAD_PRIEST は
+ * 役割管理アクション (role-management-actions.ts) のガードで無効化を禁止しているため、
+ * ここで isActive を弾いても現在の唯一ユーザー (HEAD_PRIEST, isActive=true) は影響を受けない。
  */
 export async function requireCurrentUser(): Promise<User> {
   const user = await getCurrentUser();
   if (!user) {
     throw new Error('認証が必要です。');
+  }
+  if (!user.isActive) {
+    throw new Error('このアカウントは無効化されています。');
   }
   return user;
 }

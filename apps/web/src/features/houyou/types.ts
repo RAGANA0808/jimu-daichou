@@ -3,6 +3,7 @@ import type { PreparationStatus } from '@prisma/client';
 export type MemorialServiceFieldName =
   | 'serviceName'
   | 'scheduledAt'
+  | 'endTime'
   | 'location'
   | 'attendeeCount'
   | 'tobaCount'
@@ -14,6 +15,8 @@ export type MemorialServiceFormState = {
   status: 'idle' | 'error';
   errors?: Partial<Record<MemorialServiceFieldName, string>>;
   values?: Partial<Record<MemorialServiceFieldName, string>>;
+  /** 楽観ロック衝突など、フィールド非依存のエラー (M-5)。 */
+  formError?: string;
 };
 
 export const initialMemorialServiceFormState: MemorialServiceFormState = {

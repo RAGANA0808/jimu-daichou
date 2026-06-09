@@ -3,7 +3,8 @@
 import type { TransactionCategory, TransactionDirection } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { requireCurrentTenantId } from '@/lib/auth';
+import { requireCapability } from '@/lib/auth';
+import { recordAudit } from '@/lib/audit';
 import { assertValidUuid, isValidUuid, withTenant } from '@/lib/db';
 import {
   CATEGORY_BY_DIRECTION,
@@ -163,7 +164,8 @@ export async function createTransactionAction(
     return { status: 'error', errors: v.errors, values };
   }
 
-  const tenantId = await requireCurrentTenantId();
+  const user = await requireCapability('create');
+  const tenantId = user.tenantId;
 
   // householdId が指定されていれば、自テナントの世帯であることを RLS 経由で確認。
   if (v.householdId !== null) {
@@ -182,8 +184,8 @@ export async function createTransactionAction(
     }
   }
 
-  const created = await withTenant(tenantId, (tx) =>
-    tx.transaction.create({
+  const created = await withTenant(tenantId, async (tx) => {
+    const tx0 = await tx.transaction.create({
       data: {
         tenantId,
         householdId: v.householdId,
@@ -195,8 +197,16 @@ export async function createTransactionAction(
         memo: nullIfBlank(values.memo),
       },
       select: { id: true },
-    }),
-  );
+    });
+    await recordAudit(tx, tenantId, {
+      actorId: user.id,
+      action: 'CREATE',
+      entityType: 'Transaction',
+      entityId: tx0.id,
+      summary: `入出金を登録 (${v.direction}/${v.category})`,
+    });
+    return tx0;
+  });
 
   revalidatePath('/kaikei');
   if (v.householdId) revalidatePath(`/danshintoto/${v.householdId}`);
@@ -223,7 +233,8 @@ export async function updateTransactionAction(
     return { status: 'error', errors: v.errors, values };
   }
 
-  const tenantId = await requireCurrentTenantId();
+  const user = await requireCapability('update');
+  const tenantId = user.tenantId;
 
   if (v.householdId !== null) {
     const exists = await withTenant(tenantId, (tx) =>
@@ -260,6 +271,13 @@ export async function updateTransactionAction(
         paymentMethod: nullIfBlank(values.paymentMethod),
         memo: nullIfBlank(values.memo),
       },
+    });
+    await recordAudit(tx, tenantId, {
+      actorId: user.id,
+      action: 'UPDATE',
+      entityType: 'Transaction',
+      entityId: id,
+      summary: `入出金を編集 (${v.direction}/${v.category})`,
     });
     return existing.householdId;
   });

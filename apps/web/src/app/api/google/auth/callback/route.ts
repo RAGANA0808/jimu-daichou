@@ -1,7 +1,9 @@
 import { cookies } from 'next/headers';
 import { NextResponse, type NextRequest } from 'next/server';
 import { google } from 'googleapis';
-import { requireCurrentTenantId } from '@/lib/auth';
+import { requireCapability } from '@/lib/auth';
+import { recordAudit } from '@/lib/audit';
+import { encryptSecret } from '@/lib/crypto';
 import { withTenant } from '@/lib/db';
 import { createOAuthClient } from '@/lib/google/oauth-client';
 
@@ -24,7 +26,9 @@ function redirectToSettings(
  * 1. state の整合性チェック (CSRF)
  * 2. code を token (refresh_token 含む) に交換
  * 3. 連携した Google アカウントの email を取得
- * 4. 自テナントの `googleRefreshToken` / `googleConnectedEmail` / `googleConnectedAt` を保存
+ * 4. 自テナントの `googleRefreshToken` (P-6 で暗号化) / `googleConnectedEmail` / `googleConnectedAt` を保存
+ *
+ * 権限: 連携接続はテナント全体に影響する破壊的操作のため destructive。READ_ONLY/STAFF を弾く。
  */
 export async function GET(request: NextRequest): Promise<Response> {
   const url = request.nextUrl;
@@ -52,7 +56,8 @@ export async function GET(request: NextRequest): Promise<Response> {
     });
   }
 
-  const tenantId = await requireCurrentTenantId();
+  const user = await requireCapability('destructive');
+  const tenantId = user.tenantId;
 
   const oauth = createOAuthClient();
   const tokenResponse = await oauth.getToken(code);
@@ -74,16 +79,24 @@ export async function GET(request: NextRequest): Promise<Response> {
     .userinfo.get();
   const connectedEmail = userinfo.data.email ?? null;
 
-  await withTenant(tenantId, (tx) =>
-    tx.tenant.update({
+  await withTenant(tenantId, async (tx) => {
+    await tx.tenant.update({
       where: { id: tenantId },
       data: {
-        googleRefreshToken: tokens.refresh_token,
+        // P-6: 鍵があれば AES-256-GCM で暗号化して保存 (鍵が無ければ平文・後方互換)。
+        googleRefreshToken: encryptSecret(tokens.refresh_token!),
         googleConnectedEmail: connectedEmail,
         googleConnectedAt: new Date(),
       },
-    }),
-  );
+    });
+    await recordAudit(tx, tenantId, {
+      actorId: user.id,
+      action: 'CONNECT',
+      entityType: 'Tenant',
+      entityId: tenantId,
+      summary: 'Google Calendar 連携を開始',
+    });
+  });
 
   return redirectToSettings(request, { google_connect: 'success' });
 }

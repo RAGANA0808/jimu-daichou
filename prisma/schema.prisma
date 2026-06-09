@@ -25,29 +25,58 @@ datasource db {
 // =========================================
 
 model Tenant {
-  id              String   @id @default(uuid()) @db.Uuid
-  name            String   // 寺院名 (例: "○○寺")
-  slug            String   @unique // URL スラッグ
-  headPriestName  String?  // 住職氏名 (案内状署名等で使用)
+  id             String  @id @default(uuid()) @db.Uuid
+  name           String // 寺院名 (例: "○○寺")
+  slug           String  @unique // URL スラッグ
+  headPriestName String? // 住職氏名 (案内状署名等で使用)
+  sect           Sect? // 宗派 (未設定=null=標準スケジュール。年忌の既定弔い上げの目安に使う)
 
   // Google Calendar 連携 (法要予定の自動同期用)
   googleRefreshToken   String?
   googleConnectedEmail String?
   googleConnectedAt    DateTime?
 
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  // 郵便振替 (払込取扱票) の寺口座情報 (E35)。既製用紙へのオーバープリント時の既定値。
+  postalAccountName    String? // 加入者名 (例: "○○寺")
+  postalAccountSymbol  String? // 口座記号 (例: "00100")
+  postalAccountNumber  String? // 口座番号 (例: "1234567")
+  postalTransferNote   String? // 通信欄の既定文 (任意)
+  // 印字位置オフセット (mm)。プリンタ差を吸収する全体平行移動。既定 0。
+  postalPrintOffsetXMm Float   @default(0)
+  postalPrintOffsetYMm Float   @default(0)
 
-  users              User[]
-  households         Household[]
-  persons            Person[]
-  deathLedgerEntries DeathLedgerEntry[]
-  memorialServices   MemorialService[]
-  gravePlots         GravePlot[]
-  gravePlotAreas     GravePlotArea[]
-  transactions       Transaction[]
-  interactionNotes   InteractionNote[]
-  documents          Document[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users                    User[]
+  households               Household[]
+  persons                  Person[]
+  deathLedgerEntries       DeathLedgerEntry[]
+  memorialServices         MemorialService[]
+  gravePlots               GravePlot[]
+  gravePlotAreas           GravePlotArea[]
+  burials                  Burial[]
+  graveContracts           GraveContract[]
+  transactions             Transaction[]
+  interactionNotes         InteractionNote[]
+  documents                Document[]
+  tobas                    Toba[]
+  shipmentBatches          ShipmentBatch[]
+  shipmentRecipients       ShipmentRecipient[]
+  shipmentRecipientItems   ShipmentRecipientItem[]
+  maintenanceFeePlans      MaintenanceFeePlan[]
+  maintenanceFeeInvoices   MaintenanceFeeInvoice[]
+  graveMaintenancePlans    GraveMaintenancePlan[]
+  graveMaintenanceInvoices GraveMaintenanceInvoice[]
+  postalTransferSubjects   PostalTransferSubject[]
+  tags                     Tag[]
+  householdTags            HouseholdTag[]
+  contactPoints            ContactPoint[]
+  householdSuccessions     HouseholdSuccession[]
+  auditLogs                AuditLog[]
+  templeEvents             TempleEvent[]
+  circuitTours             CircuitTour[]
+  circuitStops             CircuitStop[]
 }
 
 // =========================================
@@ -60,11 +89,13 @@ model User {
   email          String
   displayName    String
   role           UserRole @default(STAFF)
+  isActive       Boolean  @default(true) // 無効化された寺族はログイン不可・役割管理対象外
   supabaseUserId String?  @unique // Supabase Auth との対応
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  tenant Tenant @relation(fields: [tenantId], references: [id])
+  tenant    Tenant     @relation(fields: [tenantId], references: [id])
+  auditLogs AuditLog[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -72,9 +103,27 @@ model User {
 
 enum UserRole {
   HEAD_PRIEST // 住職
-  PRIEST      // 僧侶
-  STAFF       // 事務員
-  READ_ONLY   // 閲覧のみ
+  PRIEST // 僧侶
+  STAFF // 事務員
+  READ_ONLY // 閲覧のみ
+}
+
+// =========================================
+// 宗派 (年忌の既定弔い上げの目安に使う・表示用)
+// =========================================
+
+enum Sect {
+  SOTO // 曹洞宗
+  RINZAI // 臨済宗
+  OBAKU // 黄檗宗
+  TENDAI // 天台宗
+  SHINGON // 真言宗
+  JODO // 浄土宗
+  JODO_SHINSHU_HONGANJI // 浄土真宗本願寺派
+  SHINSHU_OTANI // 真宗大谷派
+  NICHIREN // 日蓮宗
+  JISHU // 時宗
+  OTHER // その他
 }
 
 // =========================================
@@ -82,28 +131,39 @@ enum UserRole {
 // =========================================
 
 model Household {
-  id              String   @id @default(uuid()) @db.Uuid
-  tenantId        String   @db.Uuid
-  householderName String   // 施主名
-  nameKana        String   // かな (検索用)
-  postalCode      String?
-  address         String?
-  phone           String?
-  mobile          String?
-  email           String?
+  id               String   @id @default(uuid()) @db.Uuid
+  tenantId         String   @db.Uuid
+  householderName  String // 施主名
+  nameKana         String // かな (検索用)
+  postalCode       String?
+  address          String?
+  phone            String?
+  mobile           String?
+  email            String?
+  // @deprecated ContactPoint へ移行。新規 UI からは書き込まないが、CSV import/export の
+  // 後方互換 (列キー "secondaryContact"/ラベル「第2連絡先」) のため当面列は保持する。
   secondaryContact String? // 第 2 連絡先 (自由記述)
-  memo            String?  // 備考メモ
-  isActive        Boolean  @default(true) // 離檀した場合 false
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  memo             String? // 備考メモ
+  isActive         Boolean  @default(true) // 離檀した場合 false
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  tenant           Tenant            @relation(fields: [tenantId], references: [id])
-  persons          Person[]
-  memorialServices MemorialService[]
-  gravePlots       GravePlot[]
-  transactions     Transaction[]
-  interactionNotes InteractionNote[]
-  documents        Document[]
+  tenant                 Tenant                  @relation(fields: [tenantId], references: [id])
+  persons                Person[]
+  memorialServices       MemorialService[]
+  gravePlots             GravePlot[]
+  graveContracts         GraveContract[]
+  transactions           Transaction[]
+  interactionNotes       InteractionNote[]
+  documents              Document[]
+  tobas                  Toba[]
+  shipmentRecipients     ShipmentRecipient[]
+  maintenanceFeePlan     MaintenanceFeePlan?
+  maintenanceFeeInvoices MaintenanceFeeInvoice[]
+  householdTags          HouseholdTag[]
+  contactPoints          ContactPoint[]
+  successions            HouseholdSuccession[]
+  circuitStops           CircuitStop[]
 
   @@index([tenantId])
   @@index([tenantId, nameKana]) // かな検索
@@ -116,20 +176,26 @@ model Household {
 // =========================================
 
 model Person {
-  id             String   @id @default(uuid()) @db.Uuid
-  tenantId       String   @db.Uuid
-  householdId    String   @db.Uuid
+  id             String    @id @default(uuid()) @db.Uuid
+  tenantId       String    @db.Uuid
+  householdId    String    @db.Uuid
   name           String
   nameKana       String
-  familyRelation String?  // 続柄 (父・母・配偶者・長男 等)
+  familyRelation String? // 続柄 (父・母・配偶者・長男 等)
   birthDate      DateTime? @db.Date
-  isDeceased     Boolean  @default(false)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  isDeceased     Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
-  tenant            Tenant             @relation(fields: [tenantId], references: [id])
-  household         Household          @relation(fields: [householdId], references: [id])
-  deathLedgerEntry  DeathLedgerEntry?
+  tenant           Tenant            @relation(fields: [tenantId], references: [id])
+  household        Household         @relation(fields: [householdId], references: [id])
+  deathLedgerEntry DeathLedgerEntry?
+  tobas            Toba[]
+  burials          Burial[]
+  contactPoints    ContactPoint[]
+  successionsAsPrevious HouseholdSuccession[] @relation("SuccessionPreviousPerson")
+  successionsAsNext     HouseholdSuccession[] @relation("SuccessionNextPerson")
+  shipmentRecipientItems ShipmentRecipientItem[]
 
   @@index([tenantId])
   @@index([householdId])
@@ -141,25 +207,47 @@ model Person {
 // =========================================
 
 model DeathLedgerEntry {
-  id             String    @id @default(uuid()) @db.Uuid
-  tenantId       String    @db.Uuid
-  personId       String    @unique @db.Uuid // 1 Person = 1 Entry
-  kaimyoName     String?   // 戒名
-  secularName    String    // 俗名
-  dateOfDeath    DateTime  @db.Date // 没年月日 (西暦マスタ)
-  dateOfDeathWareki String? // 和暦表記 (例: "令和6年3月15日")
-  ageAtDeath     Int?      // 行年
-  burialLocation String?   // 埋葬場所
-  memo           String?
-  deletedAt      DateTime? // 論理削除 (物理削除禁止)
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  id                        String               @id @default(uuid()) @db.Uuid
+  tenantId                  String               @db.Uuid
+  personId                  String               @unique @db.Uuid // 1 Person = 1 Entry
+  kaimyoName                String? // 戒名
+  secularName               String // 俗名
+  // 没年月日 (西暦マスタ)。月日不明・年のみ判明の故人は null を許容するため nullable。
+  // 完全な年月日が判明している場合のみ値が入る (DATE 精度に依存する既存クエリとの後方互換)。
+  dateOfDeath               DateTime?            @db.Date
+  // 構造化された没年月日。明治以前・年のみ判明・月日不明にも対応する。
+  // datePrecision に応じて month/day が null になる。dateOfDeath が値を持つ場合は
+  // それと一致する (deathYear/Month/Day が真のソース)。
+  deathYear                 Int? // 没年 (西暦)。不明な場合は null (datePrecision=UNKNOWN)
+  deathMonth                Int? // 没月 (1-12)。不明は null
+  deathDay                  Int? // 没日 (1-31)。不明は null
+  datePrecision             DateOfDeathPrecision @default(FULL) // 没年月日の判明度
+  dateOfDeathWareki         String? // 和暦表記 (例: "令和6年3月15日")
+  ageAtDeath                Int? // 行年
+  burialLocation            String? // 埋葬場所
+  memo                      String?
+  memorialCutoffAnniversary Int? // 弔い上げ回忌 (例: 33 / 50)。null は既定 (打ち切りなし=五十回忌まで)
+  deletedAt                 DateTime? // 論理削除 (物理削除禁止)
+  deletedBy                 String?              @db.Uuid // 除外操作者 (User.id)。100 年運用の追跡性のため記録
+  deletedReason             String? // 除外理由 (誤登録・重複 等)
+  createdAt                 DateTime             @default(now())
+  updatedAt                 DateTime             @updatedAt
 
-  tenant Tenant @relation(fields: [tenantId], references: [id])
-  person Person @relation(fields: [personId], references: [id])
+  tenant    Tenant     @relation(fields: [tenantId], references: [id])
+  person    Person     @relation(fields: [personId], references: [id])
+  documents Document[]
 
   @@index([tenantId])
   @@index([tenantId, dateOfDeath])
+  @@index([tenantId, deathYear, deathMonth, deathDay]) // 命日順 (構造化) の横断一覧用
+}
+
+// 没年月日の判明度。過去帳運用では「年のみ判明」「月日不明」「明治以前」が現実に存在する。
+enum DateOfDeathPrecision {
+  FULL // 年月日すべて判明
+  YEAR_MONTH // 年月まで判明 (日不明)
+  YEAR // 年のみ判明 (月日不明)
+  UNKNOWN // すべて不明
 }
 
 // =========================================
@@ -167,24 +255,26 @@ model DeathLedgerEntry {
 // =========================================
 
 model MemorialService {
-  id                  String                @id @default(uuid()) @db.Uuid
-  tenantId            String                @db.Uuid
-  householdId         String                @db.Uuid
-  serviceName         String                // 法要名 (例: "一周忌")
-  scheduledAt         DateTime
-  location            String?
-  attendeeCount       Int?
-  tobaCount           Int?                  // 塔婆本数
-  offeringAmount      Int?                  // 御布施額
-  preparationStatus   PreparationStatus     @default(TENTATIVE)
-  assignedUserId      String?               @db.Uuid
-  googleCalendarEventId String?             // Google Calendar 連携 ID
-  memo                String?
-  createdAt           DateTime              @default(now())
-  updatedAt           DateTime              @updatedAt
+  id                    String            @id @default(uuid()) @db.Uuid
+  tenantId              String            @db.Uuid
+  householdId           String            @db.Uuid
+  serviceName           String // 法要名 (例: "一周忌")
+  scheduledAt           DateTime
+  endTime               DateTime? // 終了予定時刻 (N-6)。null は未設定 (カレンダーは既定 1 時間)。@db 指定なし=scheduledAt と同型 timestamp(3) で JST 保存
+  location              String?
+  attendeeCount         Int?
+  tobaCount             Int? // 塔婆本数
+  offeringAmount        Int? // 御布施額
+  preparationStatus     PreparationStatus @default(TENTATIVE)
+  assignedUserId        String?           @db.Uuid
+  googleCalendarEventId String? // Google Calendar 連携 ID
+  memo                  String?
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
 
   tenant    Tenant    @relation(fields: [tenantId], references: [id])
   household Household @relation(fields: [householdId], references: [id])
+  tobas     Toba[]
 
   @@index([tenantId])
   @@index([tenantId, scheduledAt])
@@ -194,8 +284,136 @@ model MemorialService {
 enum PreparationStatus {
   TENTATIVE // 未定
   CONFIRMED // 確定
-  DONE      // 完了
-  CANCELED  // 中止
+  DONE // 完了
+  CANCELED // 中止
+}
+
+// =========================================
+// 寺行事 (N-8) — 世帯に紐づかない寺全体の行事
+// =========================================
+// MemorialService (世帯必須の法要) と役割を分離する。施餓鬼・彼岸会・除夜の鐘・清掃奉仕 等、
+// 特定世帯に属さない行事をカレンダー管理する。Google Calendar 連携は法要と同じ best-effort パターン。
+model TempleEvent {
+  id                    String    @id @default(uuid()) @db.Uuid
+  tenantId              String    @db.Uuid
+  title                 String // 行事名 (例: "お盆 施餓鬼会")
+  scheduledAt           DateTime // 開始日時 (JST 保存。@db 指定なし=timestamp(3))
+  endTime               DateTime? // 終了予定時刻。null は未設定 (既定 1 時間)
+  location              String?
+  memo                  String?
+  assignedUserId        String?   @db.Uuid // 担当寺族 (FK 無し scalar、MemorialService 慣習に倣う)
+  googleCalendarEventId String? // Google Calendar 連携 ID
+  deletedAt             DateTime? // 論理削除 (除外)。物理削除しない
+  deletedBy             String?   @db.Uuid // 除外操作者 (User.id)
+  deletedReason         String? // 除外理由
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, scheduledAt]) // カレンダー: 期間レンジで引く
+}
+
+// =========================================
+// 巡回 (棚経・月参り) — 訪問先の順序付きリスト + シフト表
+// 特許回避: 地図経路・座標ルート・最適化は持たない。順序リストと帳票のみ。
+// =========================================
+
+model CircuitTour {
+  id             String            @id @default(uuid()) @db.Uuid
+  tenantId       String            @db.Uuid
+  title          String // 巡回名 (例: "8月 棚経")
+  tourType       CircuitTourType   @default(TANAGYO)
+  scheduledDate  DateTime          @db.Date // 実施日 (JST 基準・UTC0時保存)
+  assignedUserId String?           @db.Uuid // 担当寺族 (FK 無し scalar、MemorialService 慣習に倣う)
+  status         CircuitTourStatus @default(PLANNED)
+  memo           String?
+  deletedAt      DateTime? // 論理削除 (除外)。物理削除しない
+  deletedBy      String?           @db.Uuid // 除外操作者 (User.id)
+  deletedReason  String? // 除外理由
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  tenant Tenant        @relation(fields: [tenantId], references: [id])
+  stops  CircuitStop[]
+
+  @@index([tenantId])
+  @@index([tenantId, scheduledDate])
+}
+
+model CircuitStop {
+  id            String            @id @default(uuid()) @db.Uuid
+  tenantId      String            @db.Uuid
+  circuitTourId String            @db.Uuid // 親巡回
+  householdId   String?           @db.Uuid // 訪問先世帯 (任意)
+  gravePlotId   String?           @db.Uuid // 訪問先区画 (任意)
+  visitLabel    String? // 未登録先の自由記述フォールバック
+  sortOrder     Int               @default(0) // 訪問順 (昇順)
+  status        CircuitStopStatus @default(PENDING)
+  memo          String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  tenant    Tenant      @relation(fields: [tenantId], references: [id])
+  tour      CircuitTour @relation(fields: [circuitTourId], references: [id], onDelete: Cascade)
+  household Household?  @relation(fields: [householdId], references: [id])
+  gravePlot GravePlot?  @relation(fields: [gravePlotId], references: [id])
+
+  @@index([tenantId])
+  @@index([circuitTourId, sortOrder])
+  @@index([householdId])
+  @@index([gravePlotId])
+}
+
+enum CircuitTourType {
+  TANAGYO // 棚経
+  TSUKIMAIRI // 月参り
+  OTHER
+}
+
+enum CircuitTourStatus {
+  PLANNED
+  DONE
+  CANCELED
+}
+
+enum CircuitStopStatus {
+  PENDING
+  VISITED
+  SKIPPED
+}
+
+// =========================================
+// 塔婆 (申込・読上帳)
+// =========================================
+// 法要 1 件に対し複数の塔婆申込をぶら下げる。tobaCount (MemorialService の素朴な
+// 合計値) を構造化し、申込者・対象故人・本数・表記・読上順を保持する。
+// 御布施/会計 (OFFERING) 連携は布石のみ (offeringAmount を任意で持つ)。
+
+model Toba {
+  id                String   @id @default(uuid()) @db.Uuid
+  tenantId          String   @db.Uuid
+  memorialServiceId String   @db.Uuid // 紐づく法要
+  householdId       String?  @db.Uuid // 申込世帯 (任意。法要主催世帯と別の親族が申し込む場合あり)
+  applicantName     String // 申込者名 (例: "山田太郎")
+  targetPersonId    String?  @db.Uuid // 対象故人 (任意。Person への参照)
+  count             Int      @default(1) // 本数
+  inscription       String // 表記文字列 (塔婆に書く文言。戒名・施主名 等)
+  readingOrder      Int      @default(0) // 読上順 (昇順)
+  offeringAmount    Int? // 御布施額 (会計連携の布石。任意)
+  memo              String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  tenant          Tenant          @relation(fields: [tenantId], references: [id])
+  memorialService MemorialService @relation(fields: [memorialServiceId], references: [id])
+  household       Household?      @relation(fields: [householdId], references: [id])
+  targetPerson    Person?         @relation(fields: [targetPersonId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, memorialServiceId, readingOrder]) // 読上帳: 法要内を読上順で引く
+  @@index([memorialServiceId])
 }
 
 // =========================================
@@ -203,24 +421,35 @@ enum PreparationStatus {
 // =========================================
 
 model GravePlot {
-  id           String         @id @default(uuid()) @db.Uuid
-  tenantId     String         @db.Uuid
-  householdId  String?        @db.Uuid // 契約世帯 (未契約の空き区画は null)
-  areaId       String?        @db.Uuid // 配置先エリア (null = 未配置 = パレット表示)
-  plotNumber   String         // 区画番号
+  id           String          @id @default(uuid()) @db.Uuid
+  tenantId     String          @db.Uuid
+  householdId  String?         @db.Uuid // 契約世帯 (未契約の空き区画は null)
+  areaId       String?         @db.Uuid // 配置先エリア (null = 未配置 = パレット表示)
+  plotNumber   String // 区画番号
   plotType     GravePlotType
   status       GravePlotStatus @default(AVAILABLE)
-  contractDate DateTime?      @db.Date
-  contractPlan String?        // 契約プラン名
-  positionX    Int?           // エリアキャンバス上の X 座標
-  positionY    Int?           // エリアキャンバス上の Y 座標
+  contractDate DateTime?       @db.Date
+  contractPlan String? // 契約プラン名
+  // 墓標名・刻名 (G-2 逆引き)。墓標名/刻名/使用者姓のいずれからでも区画を特定できるようにする。
+  monumentName String? // 墓標名 (例: "山田家之墓"、"先祖代々之墓")
+  inscription  String? // 刻名 (棹石に刻まれた文字。複数戒名等の自由記述)
+  positionX    Int? // エリアキャンバス上の X 座標
+  positionY    Int? // エリアキャンバス上の Y 座標
   memo         String?
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
 
-  tenant    Tenant         @relation(fields: [tenantId], references: [id])
-  household Household?     @relation(fields: [householdId], references: [id])
-  area      GravePlotArea? @relation(fields: [areaId], references: [id])
+  tenant                   Tenant                    @relation(fields: [tenantId], references: [id])
+  household                Household?                @relation(fields: [householdId], references: [id])
+  area                     GravePlotArea?            @relation(fields: [areaId], references: [id])
+  // 墓地 年間管理料 (E27)。区画 1 件 = 管理料台帳 1 件。
+  graveMaintenancePlan     GraveMaintenancePlan?
+  graveMaintenanceInvoices GraveMaintenanceInvoice[]
+  // 納骨 (G-3) / 区画契約 (G-4)。いずれも論理削除のみ・履歴を残すため 1:N。
+  burials                  Burial[]
+  graveContracts           GraveContract[]
+  documents                Document[]
+  circuitStops             CircuitStop[]
 
   @@unique([tenantId, plotNumber])
   @@index([tenantId])
@@ -235,7 +464,7 @@ model GravePlot {
 model GravePlotArea {
   id           String   @id @default(uuid()) @db.Uuid
   tenantId     String   @db.Uuid
-  name         String   // エリア名 (例: "東墓地", "永代供養区")
+  name         String // エリア名 (例: "東墓地", "永代供養区")
   sortOrder    Int      @default(0) // タブの表示順
   canvasWidth  Int      @default(1200)
   canvasHeight Int      @default(800)
@@ -251,18 +480,102 @@ model GravePlotArea {
 }
 
 enum GravePlotType {
-  INDIVIDUAL       // 個人墓
-  COUPLE           // 夫婦墓
-  FAMILY           // 家族墓
+  INDIVIDUAL // 個人墓
+  COUPLE // 夫婦墓
+  FAMILY // 家族墓
   ETERNAL_MEMORIAL // 永代供養墓
-  OSSUARY          // 納骨堂
+  OSSUARY // 納骨堂
 }
 
 enum GravePlotStatus {
-  AVAILABLE   // 空き
-  IN_USE      // 使用中
-  RESERVED    // 予約済
-  CLOSED      // 墓じまい済
+  AVAILABLE // 空き
+  IN_USE // 使用中
+  RESERVED // 予約済
+  CLOSED // 墓じまい済
+  OVERDUE // 管理料滞納
+  UNCLAIMED // 無縁化
+  INTERRED_TOGETHER // 合祀済
+}
+
+// =========================================
+// 納骨 (Burial / G-3)
+// =========================================
+// 故人 (Person) を区画 (GravePlot) に納める歴史的記録。物理削除禁止 (deletedAt 論理削除のみ)。
+// 1 区画に複数の故人、1 故人は改葬・分骨もありうるため Person:Burial は 1:N。
+// 改葬・分骨で区画から出した場合は removedAt をセット (履歴は残す)。誤登録は deletedAt で除外。
+// 「現在この区画に納骨中」= deletedAt IS NULL AND removedAt IS NULL。
+
+model Burial {
+  id          String    @id @default(uuid()) @db.Uuid
+  tenantId    String    @db.Uuid
+  gravePlotId String    @db.Uuid
+  personId    String    @db.Uuid
+  interredAt  DateTime? @db.Date // 納骨日 (不明あり得るため nullable)
+  removedAt   DateTime? @db.Date // 改葬・分骨で区画から出した日 (履歴として残す)
+  memo        String? // 備考 (分骨・改葬元 等の自由記述)
+  deletedAt   DateTime? // 論理削除 (誤登録)。物理削除禁止
+  deletedBy   String?   @db.Uuid // 除外操作者 (User.id)。100 年運用の追跡性のため記録
+  deletedReason String? // 除外理由 (誤登録・重複 等)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  tenant    Tenant    @relation(fields: [tenantId], references: [id])
+  gravePlot GravePlot @relation(fields: [gravePlotId], references: [id])
+  person    Person    @relation(fields: [personId], references: [id])
+
+  @@index([tenantId])
+  @@index([gravePlotId])
+  @@index([personId])
+}
+
+// =========================================
+// 区画契約 (GraveContract / G-4)
+// =========================================
+// 永代供養/通常 等の契約を構造化する。預かり年数 (termYears)・満了日 (expiryDate) を
+// 機械可読にし、合祀期限の自動判定 (将来) の前提とする。
+// GravePlot.status (区画のライフサイクル状態=地図色) とは役割を分離する:
+//   - 区画が「今どういう状態か」     → GravePlot.status (1 区画 1 値、地図色の元)
+//   - その区画の「契約の中身・期限」 → GraveContract (契約条件の構造化)
+// GravePlot 既存の contractDate/contractPlan は素朴なメモとして残置 (GraveContract が真の契約台帳)。
+// 解約→再契約の履歴を残すため 1:N とし、有効契約は deletedAt IS NULL AND status=ACTIVE で判定。
+
+model GraveContract {
+  id           String              @id @default(uuid()) @db.Uuid
+  tenantId     String              @db.Uuid
+  gravePlotId  String              @db.Uuid
+  householdId  String?             @db.Uuid // 契約世帯 (永代供養で世帯不在ならば null)
+  contractType GraveContractType   @default(STANDARD)
+  startDate    DateTime?           @db.Date // 契約開始日
+  termYears    Int? // 預かり年数 (永代=null、有期=年数)
+  expiryDate   DateTime?           @db.Date // 満了日 (合祀期限)。startDate+termYears の確定値を保存
+  status       GraveContractStatus @default(ACTIVE) // 契約自体の状態 (区画状態とは別軸)
+  feeAmount    Int? // 契約料・管理料 (任意。円)
+  memo         String?
+  deletedAt    DateTime? // 論理削除。物理削除禁止
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id])
+  gravePlot GravePlot  @relation(fields: [gravePlotId], references: [id])
+  household Household? @relation(fields: [householdId], references: [id])
+
+  @@index([tenantId])
+  @@index([gravePlotId])
+  @@index([householdId])
+  @@index([tenantId, expiryDate]) // 満了日順 (合祀期限の到来チェック用)
+}
+
+enum GraveContractType {
+  ETERNAL_MEMORIAL // 永代供養
+  STANDARD // 通常使用
+  TEMPORARY // 一時預かり
+  OTHER // その他
+}
+
+enum GraveContractStatus {
+  ACTIVE // 契約中
+  EXPIRED // 満了 (合祀期限到来)
+  TERMINATED // 解約 (墓じまい等)
 }
 
 // =========================================
@@ -270,20 +583,25 @@ enum GravePlotStatus {
 // =========================================
 
 model Transaction {
-  id            String          @id @default(uuid()) @db.Uuid
-  tenantId      String          @db.Uuid
-  householdId   String?         @db.Uuid // 寺側の経費等では null
+  id            String               @id @default(uuid()) @db.Uuid
+  tenantId      String               @db.Uuid
+  householdId   String?              @db.Uuid // 寺側の経費等では null
   category      TransactionCategory
-  amount        Int             // 円単位
+  amount        Int // 円単位
   direction     TransactionDirection
-  paidAt        DateTime        @db.Date
-  paymentMethod String?         // 現金 / 振込 / その他
+  paidAt        DateTime             @db.Date
+  paymentMethod String? // 現金 / 振込 / その他
   memo          String?
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
 
-  tenant    Tenant     @relation(fields: [tenantId], references: [id])
-  household Household? @relation(fields: [householdId], references: [id])
+  tenant                  Tenant                   @relation(fields: [tenantId], references: [id])
+  household               Household?               @relation(fields: [householdId], references: [id])
+  // 護持会費の入金消込で自動起票された場合の逆参照 (二重起票防止)。
+  maintenanceFeeInvoice   MaintenanceFeeInvoice?
+  // 墓地 年間管理料 (E27) の入金消込で自動起票された場合の逆参照 (二重起票防止)。
+  graveMaintenanceInvoice GraveMaintenanceInvoice?
+  documents               Document[]
 
   @@index([tenantId])
   @@index([tenantId, paidAt])
@@ -292,10 +610,10 @@ model Transaction {
 
 enum TransactionCategory {
   MAINTENANCE_FEE // 護持会費
-  OFFERING        // 御布施
-  DONATION        // 寄付
-  EVENT_FEE       // 行事関連
-  EXPENSE         // 支出 (寺側の経費)
+  OFFERING // 御布施
+  DONATION // 寄付
+  EVENT_FEE // 行事関連
+  EXPENSE // 支出 (寺側の経費)
   OTHER
 }
 
@@ -309,15 +627,18 @@ enum TransactionDirection {
 // =========================================
 
 model InteractionNote {
-  id          String   @id @default(uuid()) @db.Uuid
-  tenantId    String   @db.Uuid
-  householdId String   @db.Uuid
-  authorId    String?  @db.Uuid // 記録した寺族
+  id          String          @id @default(uuid()) @db.Uuid
+  tenantId    String          @db.Uuid
+  householdId String          @db.Uuid
+  authorId    String?         @db.Uuid // 記録した寺族
   kind        InteractionKind @default(NOTE)
-  content     String   // 本文
-  occurredAt  DateTime @default(now())
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  category    InteractionCategory @default(OTHER) // 話題の分類
+  isPinned    Boolean         @default(false) // 伝言として最上部に固定
+  content     String // 本文
+  occurredAt  DateTime        @default(now())
+  deletedAt   DateTime? // 論理削除 (「除外」)。対応履歴は物理削除しない
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
 
   tenant    Tenant    @relation(fields: [tenantId], references: [id])
   household Household @relation(fields: [householdId], references: [id])
@@ -327,30 +648,512 @@ model InteractionNote {
 }
 
 enum InteractionKind {
-  PHONE        // 電話
-  VISIT        // 訪問
-  EMAIL        // メール
+  PHONE // 電話
+  VISIT // 訪問
+  EMAIL // メール
   CONVERSATION // 対面会話
-  NOTE         // その他メモ
+  NOTE // その他メモ
+}
+
+enum InteractionCategory {
+  CONTRACT // 契約
+  MEMORIAL // 法要
+  FUNERAL // 葬儀
+  TOUR // 見学
+  FAMILY // 家族
+  HEALTH // 健康
+  MESSAGE // 伝言
+  SCHEDULE // 予定
+  GRAVE_VISIT // お参り
+  KAIMYO // 戒名
+  OTHER // その他
 }
 
 // =========================================
-// 書類・画像 (Supabase Storage への参照)
+// 書類・画像 (Supabase Storage への参照) — D-1 書類クラウド保管
 // =========================================
-
+// 非公開バケット documents に格納したオブジェクトへの参照。物理 blob は論理削除でも保持する
+// (宗教的・歴史的価値 + 復元可能性)。親エンティティ (世帯/区画/会計/過去帳) に optional で紐づく。
+// 同一書類を複数エンティティへ多重紐付けはしない (1 Document = 1 親種別、最大1件)。
 model Document {
-  id          String   @id @default(uuid()) @db.Uuid
-  tenantId    String   @db.Uuid
-  householdId String?  @db.Uuid
-  title       String
-  storagePath String   // Supabase Storage のオブジェクトパス
-  mimeType    String
-  byteSize    Int
-  createdAt   DateTime @default(now())
+  id                 String   @id @default(uuid()) @db.Uuid
+  tenantId           String   @db.Uuid
+  // 紐付け先 (いずれか0..1件。UI/アクション側で「ちょうど1つ」を保証する)
+  householdId        String?  @db.Uuid
+  gravePlotId        String?  @db.Uuid
+  transactionId      String?  @db.Uuid
+  deathLedgerEntryId String?  @db.Uuid
+  title              String
+  storagePath        String // Supabase Storage のオブジェクトパス (tenantId/documentId/filename)
+  mimeType           String
+  byteSize           Int
+  uploadedById       String?  @db.Uuid // アップロード操作者 (User.id)。FK 無し scalar (既存慣習)
+  deletedAt          DateTime? // 論理削除 (物理削除しない。blob は保持)
+  deletedBy          String?  @db.Uuid // 除外操作者 (User.id)。FK 無し scalar
+  deletedReason      String? // 除外理由 (誤登録・重複 等)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
-  tenant    Tenant     @relation(fields: [tenantId], references: [id])
-  household Household? @relation(fields: [householdId], references: [id])
+  tenant           Tenant            @relation(fields: [tenantId], references: [id])
+  household        Household?        @relation(fields: [householdId], references: [id])
+  gravePlot        GravePlot?        @relation(fields: [gravePlotId], references: [id])
+  transaction      Transaction?      @relation(fields: [transactionId], references: [id])
+  deathLedgerEntry DeathLedgerEntry? @relation(fields: [deathLedgerEntryId], references: [id])
 
   @@index([tenantId])
   @@index([householdId])
+  @@index([gravePlotId])
+  @@index([transactionId])
+  @@index([deathLedgerEntryId])
+  @@index([tenantId, createdAt]) // 一覧 (新しい順) 用
+}
+
+// =========================================
+// 発送ワークフロー (E03 法要案内 発送)
+// =========================================
+// 「対象抽出 → 確認 → 送信(発送記録)」の手動トリガを基本とする (特許回避)。
+// 1 回の発送操作 = ShipmentBatch、その宛先 1 件 = ShipmentRecipient。
+// 発送物 (案内状/宛名ラベル/封筒/CSV) と差込内容 (日時・場所・御布施目安・返信締切) を保持し、
+// 発送記録は世帯のカルテ (InteractionNote) にも連携する。
+
+model ShipmentBatch {
+  id             String               @id @default(uuid()) @db.Uuid
+  tenantId       String               @db.Uuid
+  title          String // 発送名 (例: "2026年 年忌法要のご案内")
+  documentType   ShipmentDocumentType @default(NOTICE_LETTER)
+  // 差込内容 (案内本文に差し込む共通項目)。任意。
+  serviceDate    DateTime? // 法要日時
+  location       String? // 場所
+  offeringGuide  String? // 御布施目安 (自由記述)
+  replyDeadline  DateTime?            @db.Date // 返信締切
+  bodyNote       String? // 案内本文への追記 (自由記述)
+  targetYear     Int? // 年忌表起点の場合の対象年 (任意)
+  recipientCount Int                  @default(0) // 宛先数 (スナップショット)
+  sentById       String?              @db.Uuid // 発送操作者 (User.id)
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  tenant     Tenant              @relation(fields: [tenantId], references: [id])
+  recipients ShipmentRecipient[]
+
+  @@index([tenantId])
+  @@index([tenantId, createdAt])
+}
+
+model ShipmentRecipient {
+  id              String   @id @default(uuid()) @db.Uuid
+  tenantId        String   @db.Uuid
+  batchId         String   @db.Uuid
+  householdId     String?  @db.Uuid // 宛先世帯 (世帯削除時は null 化するが記録は残す)
+  // 発送時点のスナップショット (後から世帯情報が変わっても発送記録は当時のまま残す)
+  householderName String
+  postalCode      String?
+  address         String?
+  // この宛先に差し込んだ故人/年忌の概要 (例: "山田花子 三回忌") を保持
+  summary         String?
+  createdAt       DateTime @default(now())
+
+  tenant    Tenant        @relation(fields: [tenantId], references: [id])
+  batch     ShipmentBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  household Household?    @relation(fields: [householdId], references: [id])
+  // 故人×回忌の明細 (A-2 重複案内防止の突合キー)。世帯粒度の宛先 1 件に複数の (故人, 回忌) がぶら下がる。
+  items     ShipmentRecipientItem[]
+
+  @@index([tenantId])
+  @@index([batchId])
+  @@index([householdId])
+}
+
+// =========================================
+// 発送明細 (A-2: 重複案内防止の突合キー構造化)
+// =========================================
+// 既存 ShipmentRecipient.summary は表示用の人間可読文字列 (同世帯の複数故人を連結) で突合不能。
+// 「同一対象 (故人) × 同一回忌 × 同一年」の既送判定を機械的に行うため、宛先 1 件の配下に
+// 故人×回忌の明細を構造化して持つ。突合の第一キーは targetPersonId (Person.id)。
+// 承継・改葬で Person が欠ける将来に備え deathLedgerEntryId と表示スナップショットも保持する。
+// 過去 (本機能導入前) の宛先には明細が存在しないため、突合は今後の発送から積み上がる (遡及生成しない)。
+
+model ShipmentRecipientItem {
+  id                 String   @id @default(uuid()) @db.Uuid
+  tenantId           String   @db.Uuid
+  recipientId        String   @db.Uuid // 親 ShipmentRecipient
+  // 突合キー (構造化)
+  targetPersonId     String?  @db.Uuid // 対象故人 (Person)。承継等で null 化されても記録は残す
+  deathLedgerEntryId String?  @db.Uuid // 過去帳エントリ (personId が将来欠ける場合の保険・追跡性。FK は張らない素の UUID)
+  anniversaryKaiki   Int // 回忌 (1/3/7/13/17/23/27/33/37/50)
+  targetYear         Int // 対象年 (= ShipmentBatch.targetYear)。同一年内の二重送付判定に使う
+  // 表示スナップショット (発送当時の値。Person 変化に耐える)
+  secularName        String // 当時の俗名
+  anniversaryName    String // 当時の年忌名 (例: "三回忌")
+  createdAt          DateTime @default(now())
+
+  tenant    Tenant            @relation(fields: [tenantId], references: [id])
+  recipient ShipmentRecipient @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+  person    Person?           @relation(fields: [targetPersonId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([recipientId])
+  // 既送判定の主索引: 同一対象×同一回忌×同一年を高速突合
+  @@index([tenantId, targetPersonId, anniversaryKaiki, targetYear])
+}
+
+// 発送物の種別。1 バッチ 1 種別 (宛名ラベルと案内状を同時に出す場合はバッチを分ける運用)。
+enum ShipmentDocumentType {
+  NOTICE_LETTER // 案内状 (差込本文つき)
+  ADDRESS_LABEL // 宛名ラベル (タックシール A4 面付け)
+  ENVELOPE // 封筒宛名
+  CSV // 宛名 CSV (外部差込用)
+}
+
+// =========================================
+// 護持会費 (E07: 請求 → 入金消込 → 督促)
+// =========================================
+// 世帯ごとの年額会費を台帳化し (MaintenanceFeePlan)、年度ごとに請求を生成する
+// (MaintenanceFeeInvoice)。入金消込で会計 Transaction を自動起票する (二重起票しない)。
+// 会計科目体系 (E08) は未実装でよいので category=MAINTENANCE_FEE の既存 Transaction を使う。
+
+// 世帯ごとの護持会費 台帳 (1 世帯 1 台帳)。年額・納入区分・備考を保持する。
+model MaintenanceFeePlan {
+  id           String               @id @default(uuid()) @db.Uuid
+  tenantId     String               @db.Uuid
+  householdId  String               @unique @db.Uuid // 1 世帯 1 台帳
+  annualAmount Int // 年額会費 (円)
+  method       MaintenanceFeeMethod @default(CASH_COLLECTION) // 納入区分
+  note         String? // 備考 (賦課額の根拠・特記事項 等)
+  isActive     Boolean              @default(true) // 休止世帯は false (請求対象から除外)
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  tenant    Tenant    @relation(fields: [tenantId], references: [id])
+  household Household @relation(fields: [householdId], references: [id])
+
+  @@index([tenantId])
+  @@index([householdId])
+}
+
+// 年度ごとの護持会費 請求。台帳から一括生成し、入金で status を更新する。
+// (tenantId, householdId, fiscalYear) で一意にして重複生成を防ぐ。
+model MaintenanceFeeInvoice {
+  id            String               @id @default(uuid()) @db.Uuid
+  tenantId      String               @db.Uuid
+  householdId   String               @db.Uuid
+  fiscalYear    Int // 年度 (西暦。例: 2026)
+  amount        Int // 請求額 (生成時点の台帳 annualAmount のスナップショット)
+  paidAmount    Int                  @default(0) // 入金累計 (円)
+  status        InvoiceStatus        @default(UNPAID) // 未納 / 一部 / 完納
+  method        MaintenanceFeeMethod @default(CASH_COLLECTION) // 生成時点の納入区分スナップショット
+  dueDate       DateTime?            @db.Date // 納入期限 (任意)
+  // 入金消込で自動起票した会計 Transaction への参照 (二重起票防止)。
+  transactionId String?              @unique @db.Uuid
+  note          String?
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id])
+  household   Household    @relation(fields: [householdId], references: [id])
+  transaction Transaction? @relation(fields: [transactionId], references: [id])
+
+  @@unique([tenantId, householdId, fiscalYear]) // 同一年度の重複生成を防ぐ
+  @@index([tenantId])
+  @@index([tenantId, fiscalYear])
+  @@index([tenantId, fiscalYear, status])
+  @@index([householdId])
+}
+
+// 納入区分。
+enum MaintenanceFeeMethod {
+  ANNUAL_LUMP // 年払 (一括)
+  BON_HIGAN // 盆彼岸集金
+  BANK_TRANSFER // 口座振替
+  CASH_COLLECTION // 手集金
+  OTHER // その他
+}
+
+// 請求の入金状況。
+enum InvoiceStatus {
+  UNPAID // 未納
+  PARTIAL // 一部入金
+  PAID // 完納
+}
+
+// =========================================
+// 墓地 年間管理料 (E27: 請求 → 入金消込 → 滞納 → 催告)
+// =========================================
+// 護持会費 (E07) が「世帯単位」であるのに対し、墓地管理料は「区画 (GravePlot) 単位」で賦課する。
+// 課金主体が異なるため、台帳・請求モデルを E07 とは別に分離する (混同しないデータモデル)。
+// 区画ごとの年額管理料を台帳化し (GraveMaintenancePlan)、年度ごとに請求を生成する
+// (GraveMaintenanceInvoice)。入金消込で会計 Transaction を自動起票する (二重起票しない)。
+// 会計科目体系 (E08) は前提にしないため、category=OTHER + memo で護持会費と区別する。
+
+// 区画ごとの 墓地管理料 台帳 (1 区画 1 台帳)。年額・賦課根拠・納入区分・備考を保持する。
+model GraveMaintenancePlan {
+  id           String                 @id @default(uuid()) @db.Uuid
+  tenantId     String                 @db.Uuid
+  gravePlotId  String                 @unique @db.Uuid // 1 区画 1 台帳 (課金主体は区画)
+  annualAmount Int // 年額管理料 (円)
+  basis        String? // 賦課根拠 (面積・区画種別・規程等の根拠の自由記述)
+  method       GraveMaintenanceMethod @default(BANK_TRANSFER) // 納入区分
+  note         String? // 備考 (特記事項 等)
+  isActive     Boolean                @default(true) // 休止区画は false (請求対象から除外)
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+
+  tenant    Tenant    @relation(fields: [tenantId], references: [id])
+  gravePlot GravePlot @relation(fields: [gravePlotId], references: [id])
+
+  @@index([tenantId])
+  @@index([gravePlotId])
+}
+
+// 年度ごとの 墓地管理料 請求。台帳から一括生成し、入金で status を更新する。
+// (tenantId, gravePlotId, fiscalYear) で一意にして重複生成を防ぐ。
+model GraveMaintenanceInvoice {
+  id            String                 @id @default(uuid()) @db.Uuid
+  tenantId      String                 @db.Uuid
+  gravePlotId   String                 @db.Uuid
+  fiscalYear    Int // 年度 (西暦。例: 2026)
+  amount        Int // 請求額 (生成時点の台帳 annualAmount のスナップショット)
+  paidAmount    Int                    @default(0) // 入金累計 (円)
+  status        InvoiceStatus          @default(UNPAID) // 未納 / 一部 / 完納
+  method        GraveMaintenanceMethod @default(BANK_TRANSFER) // 生成時点の納入区分スナップショット
+  dueDate       DateTime?              @db.Date // 納入期限 (任意)
+  // 入金消込で自動起票した会計 Transaction への参照 (二重起票防止)。
+  transactionId String?                @unique @db.Uuid
+  note          String?
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id])
+  gravePlot   GravePlot    @relation(fields: [gravePlotId], references: [id])
+  transaction Transaction? @relation(fields: [transactionId], references: [id])
+
+  @@unique([tenantId, gravePlotId, fiscalYear]) // 同一年度の重複生成を防ぐ
+  @@index([tenantId])
+  @@index([tenantId, fiscalYear])
+  @@index([tenantId, fiscalYear, status])
+  @@index([gravePlotId])
+}
+
+// 墓地管理料の納入区分 (口座振替が主流)。E07 とは別 enum にして課金主体の混同を防ぐ。
+enum GraveMaintenanceMethod {
+  BANK_TRANSFER // 口座振替
+  POSTAL_TRANSFER // 郵便振替
+  ANNUAL_LUMP // 年払 (一括)
+  CASH // 現金
+  OTHER // その他
+}
+
+// =========================================
+// 郵便振替 払込取扱票 (E35: 科目テンプレ → 世帯ごと金額差込 → 既製用紙へオーバープリント)
+// =========================================
+// 寺が普段の集金で使う郵便振替に、施主の氏名・住所と科目別金額を差し込んで印刷・配布する。
+// 科目テンプレ (護持会費/墓地管理費/お布施/寄付 等) はテナント単位で定義し、世帯ごとの金額は
+// 生成時に差し込む (E07/E27 の当年度請求額を初期値に流し込める)。世帯別金額は永続化しない
+// (常に最新の台帳から再計算 / 画面で都度入力)。寺の口座既定値は Tenant に持つ。
+
+// 科目テンプレート 1 件。表示有無・既定金額・並び順を保持する。
+model PostalTransferSubject {
+  id            String                     @id @default(uuid()) @db.Uuid
+  tenantId      String                     @db.Uuid
+  name          String // 科目名 (例: "護持会費")
+  defaultAmount Int                        @default(0) // 既定金額 (円)。世帯差込時の初期値
+  sortOrder     Int                        @default(0) // 表示順 (昇順)
+  // E07/E27 の当年度請求額を初期値に流し込むためのソース種別。
+  // NONE は連動なし (defaultAmount をそのまま使う)。
+  amountSource  PostalTransferAmountSource @default(NONE)
+  isVisible     Boolean                    @default(true) // 用紙・明細に表示するか
+  isActive      Boolean                    @default(true) // 休止科目は false (一覧・差込から除外)
+  createdAt     DateTime                   @default(now())
+  updatedAt     DateTime                   @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, sortOrder])
+}
+
+// 科目の金額初期値の取得元。
+enum PostalTransferAmountSource {
+  NONE // 連動なし (defaultAmount を使う)
+  MAINTENANCE_FEE // 護持会費 (E07) の当年度請求額
+  GRAVE_MAINTENANCE // 墓地 年間管理料 (E27) の当年度請求額
+}
+
+// =========================================
+// 自由タグ (横断抽出)
+// =========================================
+// テナント内で再利用するタグマスタ。世帯への付与は明示的中間 HouseholdTag で表す。
+// 暗黙的多対多 (Prisma @relation のみ) は tenantId/RLS を持てないため使わない。
+
+model Tag {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid
+  name      String // タグ名 (例: "確認事項あり" "心配" "高齢夫婦")
+  color     String? // チップ配色キー (TAG_COLORS のいずれか。null は既定 NEUTRAL)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant        Tenant         @relation(fields: [tenantId], references: [id])
+  householdTags HouseholdTag[]
+
+  @@unique([tenantId, name]) // テナント内でタグ名重複を禁止
+  @@index([tenantId])
+}
+
+// 世帯 ⇔ タグ の明示的中間。1 世帯に同じタグは 1 回だけ。
+model HouseholdTag {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @db.Uuid
+  householdId String   @db.Uuid
+  tagId       String   @db.Uuid
+  createdAt   DateTime @default(now())
+
+  tenant    Tenant    @relation(fields: [tenantId], references: [id])
+  household  Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  tag       Tag       @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([householdId, tagId]) // 同一世帯への同一タグ重複付与を禁止
+  @@index([tenantId])
+  @@index([householdId])
+  @@index([tagId])
+}
+
+// =========================================
+// 連絡先 (多階層・複数登録) — C-2
+// =========================================
+// せいざん「第2連絡先・孫世代まで人数無制限の階層登録」を構造化したもの。
+// 従来の Household.secondaryContact (1行自由記述) を構造化して置き換える。
+// person を任意で紐付けると家族構成員 (Person) と連絡先を関連付けられる。
+// 「階層」は親子ツリーにはせず sortOrder のフラットな並びで表現する (高齢者向け簡潔さを優先)。
+// 履歴的価値は薄いが、誤登録の復元・運用追跡のため論理削除 (deletedAt) のみとする。
+
+model ContactPoint {
+  id            String    @id @default(uuid()) @db.Uuid
+  tenantId      String    @db.Uuid
+  householdId   String    @db.Uuid
+  personId      String?   @db.Uuid // 任意: 家族構成員 (Person) と紐付ける場合
+  relationLabel String // 続柄・役割の自由文 (例: "第2連絡先" "長男" "孫" "嫁ぎ先")
+  name          String? // 連絡先の氏名 (relationLabel と別に保持)
+  phone         String? // 固定電話
+  mobile        String? // 携帯電話
+  email         String?
+  postalCode    String?
+  address       String?
+  note          String? // 補足メモ (例: "平日昼間は不在")
+  sortOrder     Int       @default(0) // 表示順 (手動並べ替え用)
+  isPrimary     Boolean   @default(false) // 主たる連絡先フラグ (任意の目印)
+  deletedAt     DateTime? // 論理削除 (物理削除しない)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  tenant    Tenant    @relation(fields: [tenantId], references: [id])
+  household Household @relation(fields: [householdId], references: [id])
+  person    Person?   @relation(fields: [personId], references: [id])
+
+  @@index([tenantId])
+  @@index([householdId])
+  @@index([householdId, sortOrder]) // 世帯内の表示順取得用
+  @@index([personId])
+}
+
+// =========================================
+// 承継履歴 (C-7: 施主交代の証跡)
+// =========================================
+// 施主の交代 (死亡・転居・その他) を履歴として残す。
+// 【特許回避: TERA Tech 特許第7705103号】死亡登録を契機に次施主を「全自動設定しない」。
+//   死亡登録等は status=PROPOSED の「承継候補」を起票するに留め、
+//   実際の施主確定は担当者の明示承認 (status=APPROVED) を必須とする。
+// 歴史的記録のため物理削除禁止。誤起票は status=REJECTED (却下) で論理的に無効化する。
+// 施主名は当時のスナップショット文字列を保持しつつ、判明していれば Person 参照も併せ持つ。
+
+model HouseholdSuccession {
+  id          String @id @default(uuid()) @db.Uuid
+  tenantId    String @db.Uuid
+  householdId String @db.Uuid // 対象世帯
+
+  // 前施主 (交代前)。当時の表示名スナップショット + 判明していれば Person 参照。
+  previousHouseholderName String? // 前施主名 (スナップショット)
+  previousPersonId        String? @db.Uuid // 前施主の Person (故人になり得る。判明時のみ)
+
+  // 次施主 (交代後)。候補提示時は未確定でよいので nullable。
+  nextHouseholderName String? // 次施主名 (スナップショット)
+  nextPersonId        String? @db.Uuid // 次施主の Person (世帯内の存命者。判明時のみ)
+
+  reason     SuccessionReason @default(DEATH) // 交代事由 (死亡/転居/その他)
+  occurredAt DateTime?        @db.Date // 交代発生日 (死亡日等。不明あり得るため nullable)
+
+  status SuccessionStatus @default(PROPOSED) // 候補 / 承認 / 却下
+
+  // 承認の証跡 (誰がいつ承認したか)。承認時にのみ値が入る。
+  approvedById String?   @db.Uuid // 承認操作者 (User.id)
+  approvedAt   DateTime? // 承認日時 (JST)
+
+  // 却下の証跡 (誤起票の論理無効化)。物理削除はしない。
+  rejectedById String?   @db.Uuid
+  rejectedAt   DateTime?
+
+  note      String? // 備考 (経緯・特記事項の自由記述)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant         Tenant    @relation(fields: [tenantId], references: [id])
+  household      Household @relation(fields: [householdId], references: [id])
+  previousPerson Person?   @relation("SuccessionPreviousPerson", fields: [previousPersonId], references: [id])
+  nextPerson     Person?   @relation("SuccessionNextPerson", fields: [nextPersonId], references: [id])
+
+  @@index([tenantId])
+  @@index([householdId, occurredAt]) // カルテで世帯の承継履歴を発生日順に引く
+  @@index([tenantId, status]) // 未承認候補 (PROPOSED) の横断抽出
+}
+
+// 承継事由。
+enum SuccessionReason {
+  DEATH // 死亡
+  RELOCATION // 転居
+  OTHER // その他 (生前譲渡・分家 等)
+}
+
+// 承継の状態。候補→手動承認の2段階 + 誤起票の却下。
+enum SuccessionStatus {
+  PROPOSED // 承継候補 (自動起票・未確定)
+  APPROVED // 承認済 (担当者が明示確定)
+  REJECTED // 却下 (誤起票。論理無効化。物理削除しない)
+}
+
+// =========================================
+// 監査ログ (PERMISSION P-3: 重要操作の証跡)
+// =========================================
+// 100 年運用の追跡性のため、破壊的・承認・書出・Google連携・役割変更を中心に記録する。
+// 【個人情報非載】summary には氏名/住所/電話/メール/本文を一切入れない。
+//   entityType + entityId + action + actorId + 簡潔 summary だけで「誰が何にどの操作をしたか」を表す。
+// 監査ログ自体は改竄・削除させない運用 (UPDATE/DELETE はアプリ経路で行わない。追記のみ)。
+model AuditLog {
+  id         String      @id @default(uuid()) @db.Uuid
+  tenantId   String      @db.Uuid
+  actorId    String?     @db.Uuid // 操作者 (User.id)。システム経路や退会後は null 許容
+  action     AuditAction
+  entityType String // 対象モデル名 (例: "Household", "GravePlot", "Transaction")
+  entityId   String? // 対象レコード id (一括操作・export 等で対象不定なら null)
+  summary    String      @db.VarChar(200) // 個人情報を含めない短文 (件数・年度・状態遷移など)
+  createdAt  DateTime    @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  actor  User?  @relation(fields: [actorId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, createdAt]) // ビューア: 新しい順一覧
+  @@index([tenantId, entityType, entityId]) // 将来「この対象の履歴」逆引き (任意)
+}
+
+// 監査対象の操作種別。enum 肥大を避け、却下等は OTHER で表現する。
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE // 論理削除 (除外)
+  EXPORT // CSV/Excel 書出
+  APPROVE // 承継承認 等
+  CONNECT // Google 連携開始
+  DISCONNECT // Google 連携解除
+  ROLE_CHANGE // 役割変更・有効/無効化
+  OTHER
 }

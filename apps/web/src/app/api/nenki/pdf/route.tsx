@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { renderToBuffer } from '@react-pdf/renderer';
-import { requireCurrentTenantId } from '@/lib/auth';
+import { requireCapability } from '@/lib/auth';
+import { recordAudit } from '@/lib/audit';
 import { withTenant } from '@/lib/db';
 import { findAnniversariesForYear } from '@/features/nenki/queries';
 import {
@@ -24,7 +25,8 @@ function parseYearParam(raw: string | null): number {
 
 export async function GET(request: NextRequest): Promise<Response> {
   const year = parseYearParam(request.nextUrl.searchParams.get('year'));
-  const tenantId = await requireCurrentTenantId();
+  const user = await requireCapability('export');
+  const tenantId = user.tenantId;
 
   // テナント (寺院) 名を取得
   const tenant = await withTenant(tenantId, (tx) =>
@@ -46,10 +48,19 @@ export async function GET(request: NextRequest): Promise<Response> {
     );
   }
 
+  // N+1 解消: 該当世帯の住所をまとめて 1 クエリで取得する (旧: 世帯ごとに findUnique)。
+  const householdIds = Array.from(new Set(matches.map((m) => m.householdId)));
+  const households = await withTenant(tenantId, (tx) =>
+    tx.household.findMany({
+      where: { id: { in: householdIds } },
+      select: { id: true, postalCode: true, address: true },
+    }),
+  );
+  const addrById = new Map(households.map((h) => [h.id, h]));
+
   // 世帯ごとにグループ化 (同世帯に複数年忌あれば 1 通にまとめる)
   const byHousehold = new Map<string, NoticeLetterTarget>();
   for (const m of matches) {
-    const existing = byHousehold.get(m.householdId);
     const item = {
       secularName: m.secularName,
       kaimyoName: m.kaimyoName,
@@ -57,20 +68,13 @@ export async function GET(request: NextRequest): Promise<Response> {
       month: m.anniversary.month,
       day: m.anniversary.day,
     };
+    const existing = byHousehold.get(m.householdId);
     if (existing) {
       existing.anniversaries.push(item);
       continue;
     }
 
-    // 世帯の住所情報を取得する必要があるが、matches には載っていないので別途引く。
-    // 少数前提なので N+1 クエリは許容範囲 (Phase 1)。
-    const household = await withTenant(tenantId, (tx) =>
-      tx.household.findUnique({
-        where: { id: m.householdId },
-        select: { postalCode: true, address: true },
-      }),
-    );
-
+    const household = addrById.get(m.householdId);
     byHousehold.set(m.householdId, {
       householdId: m.householdId,
       householderName: m.householdName,
@@ -93,6 +97,16 @@ export async function GET(request: NextRequest): Promise<Response> {
 
   const filename = `案内状_${year}年.pdf`;
   const encodedFilename = encodeURIComponent(filename);
+
+  // 成功した書出のみ EXPORT 記録。個人情報 (氏名・住所) は summary に載せない。
+  await withTenant(tenantId, (tx) =>
+    recordAudit(tx, tenantId, {
+      actorId: user.id,
+      action: 'EXPORT',
+      entityType: 'Export',
+      summary: `案内状 PDF 書出 (${year}年, ${data.targets.length}件)`,
+    }),
+  );
 
   return new Response(new Uint8Array(pdfBuffer), {
     status: 200,

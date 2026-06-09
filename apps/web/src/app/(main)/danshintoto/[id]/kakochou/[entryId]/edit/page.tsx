@@ -4,14 +4,7 @@ import { updateDeathLedgerEntryAction } from '@/features/kakochou/actions';
 import { DeathLedgerEntryForm } from '@/features/kakochou/DeathLedgerEntryForm';
 import { getDeathLedgerEntryById } from '@/features/kakochou/queries';
 import { getHouseholdById } from '@/features/danshintoto/queries';
-
-function toIsoDate(d: Date): string {
-  // YYYY-MM-DD (UTC ベースで保存されているが、Date フィールドは JST 相当の月日をそのまま使う想定)
-  const y = d.getUTCFullYear();
-  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(d.getUTCDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
+import { toOptimisticToken } from '@/lib/db';
 
 export default async function EditDeathLedgerEntryPage({
   params,
@@ -36,7 +29,7 @@ export default async function EditDeathLedgerEntryPage({
   return (
     <div className="space-y-6">
       <div>
-        <nav className="text-sm text-gray-500">
+        <nav className="text-sm text-muted-foreground">
           <Link href="/danshintoto" className="hover:underline">
             檀信徒カルテ
           </Link>
@@ -48,30 +41,35 @@ export default async function EditDeathLedgerEntryPage({
             {household.householderName}
           </Link>
           <span className="mx-2">/</span>
-          <span className="text-gray-700">過去帳編集</span>
+          <span className="text-foreground">過去帳編集</span>
         </nav>
-        <h1 className="mt-2 text-2xl font-serif tracking-wider">
+        <h1 className="mt-2 text-2xl font-rounded tracking-wider">
           過去帳エントリを編集する
         </h1>
-        <p className="mt-1 text-sm text-gray-600">
+        <p className="mt-1 text-sm text-muted-foreground">
           {entry.secularName} さんの記録を編集します。
         </p>
       </div>
 
-      <div className="rounded border border-gray-200 bg-white p-6">
+      <div className="rounded border border-border bg-surface p-6">
         <DeathLedgerEntryForm
           action={updateDeathLedgerEntryAction}
           submitLabel="保存する"
           entryId={entry.id}
           cancelHref={`/danshintoto/${household.id}`}
+          expectedUpdatedAt={toOptimisticToken(entry.updatedAt)}
           initialValues={{
             secularName: entry.secularName,
             nameKana: entry.person.nameKana,
             kaimyoName: entry.kaimyoName ?? '',
-            dateOfDeath: toIsoDate(entry.dateOfDeath),
+            deathYear: entry.deathYear?.toString() ?? '',
+            deathMonth: entry.deathMonth?.toString() ?? '',
+            deathDay: entry.deathDay?.toString() ?? '',
             ageAtDeath: entry.ageAtDeath?.toString() ?? '',
             familyRelation: entry.person.familyRelation ?? '',
             burialLocation: entry.burialLocation ?? '',
+            memorialCutoffAnniversary:
+              entry.memorialCutoffAnniversary?.toString() ?? '',
             memo: entry.memo ?? '',
           }}
         />

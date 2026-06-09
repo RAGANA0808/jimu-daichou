@@ -2,8 +2,18 @@
 
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { requireCurrentTenantId } from '@/lib/auth';
-import { assertValidUuid, withTenant } from '@/lib/db';
+import { requireCapability } from '@/lib/auth';
+import { recordAudit } from '@/lib/audit';
+import {
+  assertNotStale,
+  assertValidUuid,
+  isStaleError,
+  withTenant,
+} from '@/lib/db';
+import {
+  normalizePhoneForStorage,
+  normalizePostalCode,
+} from '@/lib/search/normalize';
 import type { HouseholdFieldName, HouseholdFormState } from './types';
 
 function readField(formData: FormData, name: HouseholdFieldName): string {
@@ -61,10 +71,11 @@ function toPrismaData(values: HouseholdValues) {
   return {
     householderName: values.householderName,
     nameKana: values.nameKana,
-    postalCode: nullIfBlank(values.postalCode),
+    // C-6: 電話・郵便番号は保存時に正規化する (全角→半角・余分な記号除去・7桁ハイフン整形)。
+    postalCode: nullIfBlank(normalizePostalCode(values.postalCode)),
     address: nullIfBlank(values.address),
-    phone: nullIfBlank(values.phone),
-    mobile: nullIfBlank(values.mobile),
+    phone: nullIfBlank(normalizePhoneForStorage(values.phone)),
+    mobile: nullIfBlank(normalizePhoneForStorage(values.mobile)),
     email: nullIfBlank(values.email),
     memo: nullIfBlank(values.memo),
   };
@@ -83,10 +94,21 @@ export async function createHouseholdAction(
     return { status: 'error', errors, values };
   }
 
-  const tenantId = await requireCurrentTenantId();
-  await withTenant(tenantId, (tx) =>
-    tx.household.create({ data: { tenantId, ...toPrismaData(values) } }),
-  );
+  const user = await requireCapability('create');
+  const tenantId = user.tenantId;
+  await withTenant(tenantId, async (tx) => {
+    const created = await tx.household.create({
+      data: { tenantId, ...toPrismaData(values) },
+      select: { id: true },
+    });
+    await recordAudit(tx, tenantId, {
+      actorId: user.id,
+      action: 'CREATE',
+      entityType: 'Household',
+      entityId: created.id,
+      summary: '世帯を新規登録',
+    });
+  });
 
   revalidatePath('/danshintoto');
   redirect('/danshintoto');
@@ -116,13 +138,50 @@ export async function updateHouseholdAction(
     return { status: 'error', errors, values };
   }
 
-  const tenantId = await requireCurrentTenantId();
-  await withTenant(tenantId, (tx) =>
-    tx.household.update({
-      where: { id: idRaw },
-      data: toPrismaData(values),
-    }),
-  );
+  // M-5: 楽観ロックトークン (epoch ms 文字列)。空なら検証をスキップ (後方互換)。
+  const expectedUpdatedAt = (() => {
+    const v = formData.get('expectedUpdatedAt');
+    return typeof v === 'string' ? v : '';
+  })();
+
+  const user = await requireCapability('update');
+  const tenantId = user.tenantId;
+
+  try {
+    await withTenant(tenantId, async (tx) => {
+      if (expectedUpdatedAt.length > 0) {
+        const current = await tx.household.findUnique({
+          where: { id: idRaw },
+          select: { updatedAt: true },
+        });
+        if (!current) {
+          throw new Error('対象の世帯が見つかりませんでした。');
+        }
+        assertNotStale(expectedUpdatedAt, current.updatedAt);
+      }
+      await tx.household.update({
+        where: { id: idRaw },
+        data: toPrismaData(values),
+      });
+      await recordAudit(tx, tenantId, {
+        actorId: user.id,
+        action: 'UPDATE',
+        entityType: 'Household',
+        entityId: idRaw,
+        summary: '世帯を編集',
+      });
+    });
+  } catch (e) {
+    if (isStaleError(e)) {
+      return {
+        status: 'error',
+        values,
+        formError:
+          '他の方がこの内容を更新されました。最新の内容を読み込み直してください。',
+      };
+    }
+    throw e;
+  }
 
   revalidatePath('/danshintoto');
   revalidatePath(`/danshintoto/${idRaw}`);
@@ -142,13 +201,21 @@ export async function setHouseholdInactiveAction(
   }
   assertValidUuid(idRaw, 'householdId');
 
-  const tenantId = await requireCurrentTenantId();
-  await withTenant(tenantId, (tx) =>
-    tx.household.update({
+  const user = await requireCapability('destructive');
+  const tenantId = user.tenantId;
+  await withTenant(tenantId, async (tx) => {
+    await tx.household.update({
       where: { id: idRaw },
       data: { isActive: false },
-    }),
-  );
+    });
+    await recordAudit(tx, tenantId, {
+      actorId: user.id,
+      action: 'DELETE',
+      entityType: 'Household',
+      entityId: idRaw,
+      summary: '世帯を離檀 (論理削除)',
+    });
+  });
 
   revalidatePath('/danshintoto');
   redirect('/danshintoto');

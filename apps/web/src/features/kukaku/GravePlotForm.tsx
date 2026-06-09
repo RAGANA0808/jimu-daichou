@@ -55,7 +55,7 @@ function TextField({
   const value = state.values?.[name] ?? defaultValue ?? '';
   return (
     <div className="space-y-1">
-      <label htmlFor={name} className="block text-sm font-medium text-gray-700">
+      <label htmlFor={name} className="block text-sm font-medium text-foreground">
         {label}
         {required && <span className="ml-1 text-red-600">*</span>}
       </label>
@@ -68,7 +68,7 @@ function TextField({
         placeholder={placeholder}
         inputMode={type === 'number' ? 'numeric' : undefined}
         aria-invalid={error ? 'true' : undefined}
-        className="block w-full rounded border border-gray-300 px-3 py-2 text-base focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
+        className="block w-full rounded border border-border px-3 py-2 text-base focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
       />
       {error && <p className="text-sm text-red-700">{error}</p>}
     </div>
@@ -90,7 +90,7 @@ function TextareaField({
   const value = state.values?.[name] ?? defaultValue ?? '';
   return (
     <div className="space-y-1">
-      <label htmlFor={name} className="block text-sm font-medium text-gray-700">
+      <label htmlFor={name} className="block text-sm font-medium text-foreground">
         {label}
       </label>
       <textarea
@@ -99,7 +99,7 @@ function TextareaField({
         rows={3}
         defaultValue={value}
         aria-invalid={error ? 'true' : undefined}
-        className="block w-full rounded border border-gray-300 px-3 py-2 text-base focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
+        className="block w-full rounded border border-border px-3 py-2 text-base focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
       />
       {error && <p className="text-sm text-red-700">{error}</p>}
     </div>
@@ -149,7 +149,7 @@ export function GravePlotForm({
       <div className="space-y-1">
         <label
           htmlFor="plotType"
-          className="block text-sm font-medium text-gray-700"
+          className="block text-sm font-medium text-foreground"
         >
           区画種別<span className="ml-1 text-red-600">*</span>
         </label>
@@ -159,7 +159,7 @@ export function GravePlotForm({
           required
           defaultValue={plotTypeValue}
           aria-invalid={plotTypeError ? 'true' : undefined}
-          className="block w-full rounded border border-gray-300 px-3 py-2 text-base focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
+          className="block w-full rounded border border-border px-3 py-2 text-base focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
         >
           <option value="">選択してください</option>
           {GRAVE_PLOT_TYPE_ORDER.map((t) => (
@@ -176,7 +176,7 @@ export function GravePlotForm({
       <div className="space-y-1">
         <label
           htmlFor="status"
-          className="block text-sm font-medium text-gray-700"
+          className="block text-sm font-medium text-foreground"
         >
           状態
         </label>
@@ -185,7 +185,7 @@ export function GravePlotForm({
           name="status"
           defaultValue={statusValue}
           aria-invalid={statusError ? 'true' : undefined}
-          className="block w-full rounded border border-gray-300 px-3 py-2 text-base focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
+          className="block w-full rounded border border-border px-3 py-2 text-base focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
         >
           {GRAVE_PLOT_STATUS_ORDER.map((s) => (
             <option key={s} value={s}>
@@ -199,10 +199,10 @@ export function GravePlotForm({
       <div className="space-y-1">
         <label
           htmlFor="householdId"
-          className="block text-sm font-medium text-gray-700"
+          className="block text-sm font-medium text-foreground"
         >
           契約世帯
-          <span className="ml-2 text-xs font-normal text-gray-500">
+          <span className="ml-2 text-xs font-normal text-muted-foreground">
             (使用中・予約済の場合は必須)
           </span>
         </label>
@@ -211,7 +211,7 @@ export function GravePlotForm({
           name="householdId"
           defaultValue={householdValue}
           aria-invalid={householdError ? 'true' : undefined}
-          className="block w-full rounded border border-gray-300 px-3 py-2 text-base focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
+          className="block w-full rounded border border-border px-3 py-2 text-base focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
         >
           <option value="">(未選択)</option>
           {householdOptions.map((h) => (
@@ -228,10 +228,10 @@ export function GravePlotForm({
       <div className="space-y-1">
         <label
           htmlFor="areaId"
-          className="block text-sm font-medium text-gray-700"
+          className="block text-sm font-medium text-foreground"
         >
           エリア
-          <span className="ml-2 text-xs font-normal text-gray-500">
+          <span className="ml-2 text-xs font-normal text-muted-foreground">
             (地図上の配置先。未選択なら地図に表示されない)
           </span>
         </label>
@@ -240,7 +240,7 @@ export function GravePlotForm({
           name="areaId"
           defaultValue={areaValue}
           aria-invalid={areaError ? 'true' : undefined}
-          className="block w-full rounded border border-gray-300 px-3 py-2 text-base focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
+          className="block w-full rounded border border-border px-3 py-2 text-base focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
         >
           <option value="">(未選択)</option>
           {areaOptions.map((a) => (
@@ -269,6 +269,21 @@ export function GravePlotForm({
         />
       </div>
 
+      <TextField
+        name="monumentName"
+        label="墓標名"
+        placeholder="例: 山田家之墓 / 先祖代々之墓"
+        state={state}
+        defaultValue={iv.monumentName}
+      />
+
+      <TextareaField
+        name="inscription"
+        label="刻名"
+        state={state}
+        defaultValue={iv.inscription}
+      />
+
       <TextareaField
         name="memo"
         label="備考メモ"
@@ -280,13 +295,13 @@ export function GravePlotForm({
         <button
           type="submit"
           disabled={isPending}
-          className="rounded bg-gray-900 px-4 py-2 text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-400"
+          className="inline-flex min-h-touch items-center rounded bg-brand px-4 py-2 font-medium text-brand-foreground transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isPending ? '保存中…' : submitLabel}
         </button>
         <Link
           href={cancelHref}
-          className="rounded border border-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-100"
+          className="rounded border border-border px-4 py-2 text-foreground hover:bg-muted"
         >
           キャンセル
         </Link>

@@ -4,7 +4,8 @@ import type { GravePlotStatus, GravePlotType } from '@prisma/client';
 import { Prisma } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { requireCurrentTenantId } from '@/lib/auth';
+import { requireCapability } from '@/lib/auth';
+import { recordAudit } from '@/lib/audit';
 import { assertValidUuid, isValidUuid, withTenant } from '@/lib/db';
 import type {
   GravePlotFieldName,
@@ -35,6 +36,8 @@ function extractValues(formData: FormData): GravePlotValues {
     areaId: readField(formData, 'areaId'),
     contractDate: readField(formData, 'contractDate'),
     contractPlan: readField(formData, 'contractPlan'),
+    monumentName: readField(formData, 'monumentName'),
+    inscription: readField(formData, 'inscription'),
     memo: readField(formData, 'memo'),
   };
 }
@@ -137,6 +140,14 @@ function validate(values: GravePlotValues): {
     errors.contractPlan = '60 文字以内でご入力ください。';
   }
 
+  if (values.monumentName.length > 100) {
+    errors.monumentName = '100 文字以内でご入力ください。';
+  }
+
+  if (values.inscription.length > 500) {
+    errors.inscription = '500 文字以内でご入力ください。';
+  }
+
   return {
     errors,
     plotType,
@@ -159,6 +170,8 @@ function buildDataFromValues(
     areaId: v.areaId,
     contractDate: v.contractDate,
     contractPlan: nullIfBlank(values.contractPlan),
+    monumentName: nullIfBlank(values.monumentName),
+    inscription: nullIfBlank(values.inscription),
     memo: nullIfBlank(values.memo),
   };
 }
@@ -177,16 +190,25 @@ export async function createGravePlotAction(
     return { status: 'error', errors: v.errors, values };
   }
 
-  const tenantId = await requireCurrentTenantId();
+  const user = await requireCapability('create');
+  const tenantId = user.tenantId;
 
   let created: { id: string };
   try {
-    created = await withTenant(tenantId, (tx) =>
-      tx.gravePlot.create({
+    created = await withTenant(tenantId, async (tx) => {
+      const plot = await tx.gravePlot.create({
         data: { tenantId, ...buildDataFromValues(values, v) },
         select: { id: true },
-      }),
-    );
+      });
+      await recordAudit(tx, tenantId, {
+        actorId: user.id,
+        action: 'CREATE',
+        entityType: 'GravePlot',
+        entityId: plot.id,
+        summary: '区画を新規登録',
+      });
+      return plot;
+    });
   } catch (err) {
     if (
       err instanceof Prisma.PrismaClientKnownRequestError &&
@@ -228,7 +250,8 @@ export async function updateGravePlotAction(
     return { status: 'error', errors: v.errors, values };
   }
 
-  const tenantId = await requireCurrentTenantId();
+  const user = await requireCapability('update');
+  const tenantId = user.tenantId;
 
   let prevHouseholdId: string | null;
   try {
@@ -251,6 +274,13 @@ export async function updateGravePlotAction(
       await tx.gravePlot.update({
         where: { id },
         data: updatePayload,
+      });
+      await recordAudit(tx, tenantId, {
+        actorId: user.id,
+        action: 'UPDATE',
+        entityType: 'GravePlot',
+        entityId: id,
+        summary: '区画を編集',
       });
       return existing.householdId;
     });

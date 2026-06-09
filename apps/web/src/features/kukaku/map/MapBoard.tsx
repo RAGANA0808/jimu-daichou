@@ -198,7 +198,7 @@ export function MapBoard({ areas, currentArea, placed, palette }: Props) {
         </div>
 
         {isPending && (
-          <p className="text-xs text-gray-500">保存中...</p>
+          <p className="text-xs text-muted-foreground">保存中...</p>
         )}
       </div>
     </DndContext>

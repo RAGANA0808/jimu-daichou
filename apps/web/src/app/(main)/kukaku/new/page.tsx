@@ -13,7 +13,7 @@ export default async function NewGravePlotPage() {
   return (
     <div className="space-y-6">
       <div>
-        <nav className="text-sm text-gray-500">
+        <nav className="text-sm text-muted-foreground">
           <Link href="/dashboard" className="hover:underline">
             ダッシュボード
           </Link>
@@ -22,12 +22,12 @@ export default async function NewGravePlotPage() {
             区画
           </Link>
           <span className="mx-2">/</span>
-          <span className="text-gray-700">新規登録</span>
+          <span className="text-foreground">新規登録</span>
         </nav>
-        <h1 className="mt-2 text-2xl font-serif tracking-wider">区画を登録する</h1>
+        <h1 className="mt-2 text-2xl font-rounded tracking-wider">区画を登録する</h1>
       </div>
 
-      <div className="rounded border border-gray-200 bg-white p-6">
+      <div className="rounded border border-border bg-surface p-6">
         <GravePlotForm
           action={createGravePlotAction}
           submitLabel="登録する"

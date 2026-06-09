@@ -48,7 +48,10 @@ async function upsertInitialTenant() {
  *   email_confirm=true で登録するので、初回からメール認証済み扱い = Magic Link が即届く。
  * 自前 User 側: 住職 (HEAD_PRIEST) ロールで upsert。supabaseUserId も同時にバインドする。
  */
-async function upsertInitialAdminUser(tenantId: string) {
+async function upsertInitialAdminUser(
+  tenantId: string,
+  headPriestName: string | null,
+) {
   const adminEmailRaw = process.env.INITIAL_ADMIN_EMAIL;
   if (!adminEmailRaw || adminEmailRaw.trim().length === 0) {
     console.log(
@@ -112,7 +115,12 @@ async function upsertInitialAdminUser(tenantId: string) {
     );
   }
 
-  const displayNameGuess = adminEmail.split("@")[0] ?? "住職";
+  // メールのローカル部をそのまま表示名にすると記録者表示が無機質になるため、
+  // 住職名 (あれば) → なければ「管理者」を初期値にする。既存ユーザーは update では触らない。
+  const initialDisplayName =
+    headPriestName && headPriestName.trim().length > 0
+      ? headPriestName.trim()
+      : "管理者";
 
   const user = await prisma.user.upsert({
     where: { tenantId_email: { tenantId, email: adminEmail } },
@@ -120,7 +128,7 @@ async function upsertInitialAdminUser(tenantId: string) {
     create: {
       tenantId,
       email: adminEmail,
-      displayName: displayNameGuess,
+      displayName: initialDisplayName,
       role: UserRole.HEAD_PRIEST,
       supabaseUserId,
     },
@@ -132,7 +140,7 @@ async function upsertInitialAdminUser(tenantId: string) {
 
 async function main() {
   const tenant = await upsertInitialTenant();
-  await upsertInitialAdminUser(tenant.id);
+  await upsertInitialAdminUser(tenant.id, tenant.headPriestName);
 }
 
 main()

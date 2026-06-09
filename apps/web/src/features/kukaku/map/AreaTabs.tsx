@@ -14,7 +14,7 @@ type Props = {
 
 export function AreaTabs({ areas, currentAreaId }: Props) {
   return (
-    <div className="flex flex-wrap items-center gap-1 border-b border-gray-200">
+    <div className="flex flex-wrap items-center gap-1 border-b border-border">
       {areas.map((a) => {
         const active = a.id === currentAreaId;
         return (
@@ -24,8 +24,8 @@ export function AreaTabs({ areas, currentAreaId }: Props) {
             className={[
               'rounded-t px-4 py-2 text-sm',
               active
-                ? 'border-x border-t border-gray-300 bg-white text-gray-900'
-                : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900',
+                ? 'border-x border-t border-border bg-surface text-foreground'
+                : 'text-muted-foreground hover:bg-muted hover:text-foreground',
             ].join(' ')}
           >
             {a.name}
@@ -34,7 +34,7 @@ export function AreaTabs({ areas, currentAreaId }: Props) {
       })}
       <Link
         href="/kukaku/areas"
-        className="ml-auto rounded px-3 py-1 text-xs text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+        className="ml-auto rounded px-3 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
       >
         エリア管理
       </Link>

@@ -31,6 +31,8 @@ export async function updateTenantSettingsAction(
   _prev: TenantSettingsFormState,
   formData: FormData,
 ): Promise<TenantSettingsFormState> {
+  // 認可を最優先 (fail-fast)。権限不足なら検証・DB アクセス前に弾く。
+  const tenantId = (await requireCapability('admin')).tenantId;
   const values = {
     name: readField(formData, 'name'),
     headPriestName: readField(formData, 'headPriestName'),
@@ -62,7 +64,6 @@ export async function updateTenantSettingsAction(
     return { status: 'error', errors, values };
   }
 
-  const tenantId = (await requireCapability('admin')).tenantId;
   await withTenant(tenantId, (tx) =>
     tx.tenant.update({
       where: { id: tenantId },
@@ -109,6 +110,9 @@ export async function completeTenantSetupAction(
   _prev: SetupFormState,
   formData: FormData,
 ): Promise<SetupFormState> {
+  // 認可を最優先 (fail-fast)。権限不足なら検証・DB アクセス前に弾く。
+  const user = await requireCapability('admin');
+  const tenantId = user.tenantId;
   const values: Record<SetupFieldName, string> = {
     name: readSetupField(formData, 'name'),
     headPriestName: readSetupField(formData, 'headPriestName'),
@@ -160,9 +164,6 @@ export async function completeTenantSetupAction(
   if (Object.keys(errors).length > 0) {
     return { status: 'error', errors, values };
   }
-
-  const user = await requireCapability('admin');
-  const tenantId = user.tenantId;
 
   const postalFilledCount = [
     values.postalAccountName,

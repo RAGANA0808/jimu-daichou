@@ -43,9 +43,10 @@
 
 ### Git / PR 運用（2026-06-09 開始）
 - ウェーブ(またはバッチ)ごとに feature ブランチ → PR、マージ前に security-review を1回挟む。
-- **PR #1** `wave/foundations-outreach`（基盤+PII+T-4+O-2/O-3、5コミット、security-review クリーン・マージ可）。
-- **PR #2** `wave/outreach-t2`（T-2、stacked。#1 マージ後に base が main へ自動 retarget）。
+- **PR #1**（基盤+PII+T-4+O-2/O-3）/ **PR #2**（T-2）→ **両方 MERGED**。main = `abcd22d`。マージ済みブランチは削除済み。
 - リモート: `github.com/RAGANA0808/jimu-daichou`。`gh` CLI 利用可。
+- **次ウェーブ(ANALYTICS-LATER)からも `main` を最新化してから feature ブランチを切る**。
+- **次セッション最優先 = ANALYTICS-LATER 経年トレンド分析**。確定設計は `docs/worklog/2026-06-09.md` 末尾「次のセッションへの引き継ぎ」に記載(集計値グラフのみ=特許回避・migration/依存なし・自作SVGチャート・日時2系統の年度判定に注意)。
 
 > **T-4 / O-2,O-3 とも実機 click-through 検証済み**。O-2 は宗派=浄土真宗で年忌バッジが33で打ち切り→未設定で全10回忌復帰(後方互換実証)、O-3 はウィザード4ステップ完走。**検証後テナント sect は元の未設定に復元済み**(実データ無変更)。test は 446 件(既存438+sect新規8)。
 

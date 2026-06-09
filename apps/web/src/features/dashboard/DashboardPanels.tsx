@@ -135,8 +135,10 @@ export function UpcomingServicesPanel({
 
 export function UpcomingAnniversariesPanel({
   anniversaries,
+  nextYear,
 }: {
   anniversaries: DashboardData['upcomingAnniversaries'];
+  nextYear: DashboardData['nextYearAnniversaries'];
 }) {
   return (
     <Card className="flex flex-col">
@@ -193,11 +195,24 @@ export function UpcomingAnniversariesPanel({
           </ul>
         )}
       </CardContent>
-      {anniversaries.length > 0 && (
-        <CardFooter className="py-2.5">
-          <Link href="/nenki" className="text-sm font-medium text-info hover:underline">
-            年忌表ですべて見る
-          </Link>
+      {(anniversaries.length > 0 || nextYear.count > 0) && (
+        <CardFooter className="flex-col items-start gap-1 py-2.5">
+          {anniversaries.length > 0 && (
+            <Link
+              href="/nenki"
+              className="text-sm font-medium text-info hover:underline"
+            >
+              年忌表ですべて見る
+            </Link>
+          )}
+          {nextYear.count > 0 && (
+            <Link
+              href={`/nenki?year=${nextYear.year}`}
+              className="text-sm text-info hover:underline"
+            >
+              来年（{nextYear.year}）の年忌 {nextYear.count} 件 ・ 案内の準備に
+            </Link>
+          )}
         </CardFooter>
       )}
     </Card>

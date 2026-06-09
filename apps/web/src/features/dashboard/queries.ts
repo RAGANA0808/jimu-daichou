@@ -71,6 +71,9 @@ export type UpcomingServices = {
 /** 当年で本日以降に予定日を迎える年忌 (近い順、上限つき)。 */
 export type UpcomingAnniversaries = AnniversaryMatch[];
 
+/** 来年に年忌を迎える故人の件数 (案内状の年間準備の気づき用)。 */
+export type NextYearAnniversaries = { year: number; count: number };
+
 /**
  * 未収サマリ。各既存クエリ (withTenant 済み) を件数・合計・上位数件に畳んだもの。
  * - gojikai: 当年度の護持会費 (未納・一部入金)。
@@ -97,6 +100,7 @@ export type PendingSuccessionsSummary = {
 export type DashboardData = {
   services: UpcomingServices;
   upcomingAnniversaries: UpcomingAnniversaries;
+  nextYearAnniversaries: NextYearAnniversaries;
   finance: FinanceDashboardSummary;
   plots: GravePlotStatusCounts;
   recentInteractions: RecentInteractionNote[];
@@ -131,6 +135,7 @@ export async function getDashboardData(
     bochiUnpaid,
     kyoshiCandidates,
     pendingSuccessions,
+    nextYearAnniversaryMatches,
   ] = await Promise.all([
     listUpcomingMemorialServices(),
     getFinanceDashboardSummary(now),
@@ -141,6 +146,7 @@ export async function getDashboardData(
     listDemandCandidates(fiscalYear),
     listKyoshiCandidates({ withinMonths: 12, now }),
     listPendingSuccessions(50),
+    findAnniversariesForYear(year + 1),
   ]);
 
   const today = upcomingServices.filter(
@@ -185,6 +191,10 @@ export async function getDashboardData(
   return {
     services: { today, thisMonth, nextMonth },
     upcomingAnniversaries,
+    nextYearAnniversaries: {
+      year: year + 1,
+      count: nextYearAnniversaryMatches.length,
+    },
     finance,
     plots,
     recentInteractions,

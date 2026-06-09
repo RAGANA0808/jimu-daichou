@@ -10,6 +10,11 @@ import { SearchBar } from '@/features/search/SearchBar';
 import { Sidebar } from '@/components/nav/Sidebar';
 import { MobileNav } from '@/components/nav/MobileNav';
 
+// ログイン後の全ページは認証セッション + テナント別データに依存する完全動的領域。
+// 静的プリレンダ (SSG) すると build 時に session/cookie が無く失敗するため、
+// per-request の動的レンダリングに固定する (Vercel では SSR/関数実行)。
+export const dynamic = 'force-dynamic';
+
 export default async function MainLayout({
   children,
 }: {

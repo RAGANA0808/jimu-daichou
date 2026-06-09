@@ -92,6 +92,14 @@ export function NenkiBadges({
   // 配列は回忌（=年）昇順。最初に「今年以降」になる回忌が直近の法要。
   const nextAnniversary = anniversaries.find((a) => a.year >= thisYear) ?? null;
 
+  // 「次の法要まであと◯年」の気づき表示。今年なら「今年」。
+  const nextCountdownLabel =
+    nextAnniversary === null
+      ? null
+      : nextAnniversary.year <= thisYear
+        ? '今年'
+        : `あと${nextAnniversary.year - thisYear}年`;
+
   const containerClass =
     layout === 'scroll'
       ? 'flex gap-2 overflow-x-auto whitespace-nowrap pb-1'
@@ -117,7 +125,11 @@ export function NenkiBadges({
             >
               {ann.kaiki}
             </span>
-            {isNext && <span className="text-xs font-semibold">次の法要</span>}
+            {isNext && (
+              <span className="text-xs font-semibold">
+                次の法要{nextCountdownLabel ? `・${nextCountdownLabel}` : ''}
+              </span>
+            )}
             <span className="font-medium">{ann.name}</span>
             <span className="text-xs opacity-80">{formatAnniversaryLabel(ann)}</span>
           </Badge>

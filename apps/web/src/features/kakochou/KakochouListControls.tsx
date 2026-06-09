@@ -82,6 +82,11 @@ export function KakochouListControls({
           onClick={() => pushParams({ sort: 'kana' })}
           label="かな順"
         />
+        <SortTab
+          active={sort === 'kaimyo'}
+          onClick={() => pushParams({ sort: 'kaimyo' })}
+          label="戒名順"
+        />
       </div>
     </div>
   );

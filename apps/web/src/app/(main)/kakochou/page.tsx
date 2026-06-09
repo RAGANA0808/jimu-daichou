@@ -41,7 +41,8 @@ export default async function KakochouListPage({
 }) {
   const sp = await searchParams;
   const query = typeof sp.q === 'string' ? sp.q : '';
-  const sort: DeathLedgerSort = sp.sort === 'kana' ? 'kana' : 'date';
+  const sort: DeathLedgerSort =
+    sp.sort === 'kana' ? 'kana' : sp.sort === 'kaimyo' ? 'kaimyo' : 'date';
 
   const entries = await listAllDeathLedgerEntries({ sort, query });
 

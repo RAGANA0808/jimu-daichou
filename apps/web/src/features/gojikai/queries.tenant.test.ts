@@ -19,6 +19,13 @@ vi.mock('@/lib/auth', () => ({
 vi.mock('@/lib/db', () => ({
   withTenant: (tenantId: string, fn: (tx: unknown) => unknown) =>
     withTenant(tenantId, fn),
+  // 集約経路 (問題A 根治) のヘルパ。実体と同じく tx があれば相乗り、無ければ
+  // resolveTenantId() で解決してから withTenant を張る。
+  withTenantOrTx: async (
+    tx: unknown,
+    resolveTenantId: () => Promise<string>,
+    fn: (tx: unknown) => unknown,
+  ) => (tx ? fn(tx) : withTenant(await resolveTenantId(), fn)),
   assertValidUuid: (value: string, label: string) =>
     assertValidUuid(value, label),
 }));
@@ -108,6 +115,16 @@ describe('listInvoicesByHousehold', () => {
     const { listInvoicesByHousehold } = await import('./queries');
     await listInvoicesByHousehold(HOUSEHOLD_ID);
     expect(tenantArgOf()).toBe(TENANT_ID);
+  });
+
+  it('tx を渡すと withTenant を張らず渡された tx で実行する (集約経路)', async () => {
+    const findMany = vi.fn().mockResolvedValue([]);
+    const tx = { maintenanceFeeInvoice: { findMany } };
+    const { listInvoicesByHousehold } = await import('./queries');
+    await listInvoicesByHousehold(HOUSEHOLD_ID, tx as never);
+    // 集約経路では新しいトランザクション (withTenant) を張らないことが要点。
+    expect(withTenant).not.toHaveBeenCalled();
+    expect(findMany).toHaveBeenCalledTimes(1);
   });
 });
 

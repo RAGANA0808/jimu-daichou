@@ -1,7 +1,7 @@
 import 'server-only';
-import type { HouseholdSuccession, SuccessionReason } from '@prisma/client';
+import type { HouseholdSuccession, Prisma, SuccessionReason } from '@prisma/client';
 import { requireCurrentTenantId } from '@/lib/auth';
-import { assertValidUuid, withTenant } from '@/lib/db';
+import { assertValidUuid, withTenant, withTenantOrTx } from '@/lib/db';
 
 export type SuccessionWithPersons = HouseholdSuccession & {
   previousPerson: { id: string; name: string } | null;
@@ -15,12 +15,11 @@ export type SuccessionWithPersons = HouseholdSuccession & {
  */
 export async function listSuccessionsByHousehold(
   householdId: string,
+  tx?: Prisma.TransactionClient,
 ): Promise<SuccessionWithPersons[]> {
   assertValidUuid(householdId, 'householdId');
-  const tenantId = await requireCurrentTenantId();
-
-  return withTenant(tenantId, (tx) =>
-    tx.householdSuccession.findMany({
+  return withTenantOrTx(tx, requireCurrentTenantId, (t) =>
+    t.householdSuccession.findMany({
       where: { householdId },
       include: {
         previousPerson: { select: { id: true, name: true } },

@@ -1,7 +1,8 @@
 import 'server-only';
 import { cache } from 'react';
+import type { Prisma } from '@prisma/client';
 import { requireCurrentTenantId } from '@/lib/auth';
-import { withTenant } from '@/lib/db';
+import { withTenantOrTx } from '@/lib/db';
 import { getSectDefaultCutoff } from '@/lib/nenki';
 
 /**
@@ -11,13 +12,11 @@ import { getSectDefaultCutoff } from '@/lib/nenki';
  * - 宗派未設定 (null) / 曹洞宗等は null = 標準スケジュール (五十回忌まで) で挙動不変。
  */
 export const getCurrentTenantSectDefaultCutoff = cache(
-  async (): Promise<number | null> => {
-    const tenantId = await requireCurrentTenantId();
-    const tenant = await withTenant(tenantId, (tx) =>
-      tx.tenant.findUnique({
-        where: { id: tenantId },
-        select: { sect: true },
-      }),
+  async (tx?: Prisma.TransactionClient): Promise<number | null> => {
+    // RLS (tenant_isolation) により tx 内では自テナントの Tenant 1 行のみ可視。
+    // 単独経路では withTenantOrTx が認可 + 専用 tx を張る。
+    const tenant = await withTenantOrTx(tx, requireCurrentTenantId, (t) =>
+      t.tenant.findFirst({ select: { sect: true } }),
     );
     return getSectDefaultCutoff(tenant?.sect ?? null);
   },

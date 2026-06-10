@@ -1,7 +1,7 @@
 import 'server-only';
-import type { Household } from '@prisma/client';
+import type { Household, Prisma } from '@prisma/client';
 import { requireCurrentTenantId } from '@/lib/auth';
-import { assertValidUuid, withTenant } from '@/lib/db';
+import { assertValidUuid, withTenant, withTenantOrTx } from '@/lib/db';
 
 /**
  * 自テナントの世帯一覧を取得する。
@@ -25,10 +25,10 @@ export async function listHouseholds(): Promise<Household[]> {
  */
 export async function getHouseholdById(
   id: string,
+  tx?: Prisma.TransactionClient,
 ): Promise<Household | null> {
   assertValidUuid(id, 'householdId');
-  const tenantId = await requireCurrentTenantId();
-  return withTenant(tenantId, (tx) =>
-    tx.household.findUnique({ where: { id } }),
+  return withTenantOrTx(tx, requireCurrentTenantId, (t) =>
+    t.household.findUnique({ where: { id } }),
   );
 }

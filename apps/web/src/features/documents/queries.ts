@@ -1,6 +1,7 @@
 import 'server-only';
+import type { Prisma } from '@prisma/client';
 import { requireCapability } from '@/lib/auth';
-import { assertValidUuid, withTenant } from '@/lib/db';
+import { assertValidUuid, withTenant, withTenantOrTx } from '@/lib/db';
 import type { DocumentListItem } from './types';
 
 // storagePath は UI へ露出させない (signed URL は getDocumentDownloadUrlAction で都度発行)。
@@ -18,15 +19,18 @@ const LIST_SELECT = {
  */
 export async function listDocumentsByHousehold(
   householdId: string,
+  tx?: Prisma.TransactionClient,
 ): Promise<DocumentListItem[]> {
   assertValidUuid(householdId, 'householdId');
-  const tenantId = (await requireCapability('read')).tenantId;
-  return withTenant(tenantId, (tx) =>
-    tx.document.findMany({
-      where: { householdId, deletedAt: null },
-      select: LIST_SELECT,
-      orderBy: { createdAt: 'desc' },
-    }),
+  return withTenantOrTx(
+    tx,
+    async () => (await requireCapability('read')).tenantId,
+    (t) =>
+      t.document.findMany({
+        where: { householdId, deletedAt: null },
+        select: LIST_SELECT,
+        orderBy: { createdAt: 'desc' },
+      }),
   );
 }
 

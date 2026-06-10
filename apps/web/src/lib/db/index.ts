@@ -1,6 +1,6 @@
 export { prisma } from './client';
 export { adminPrisma } from './admin-client';
-export { withTenant } from './with-tenant';
+export { withTenant, withTenantOrTx } from './with-tenant';
 export { assertValidUuid, isValidUuid } from './uuid';
 export {
   StaleError,

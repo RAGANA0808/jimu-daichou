@@ -1,6 +1,7 @@
 import 'server-only';
+import type { Prisma } from '@prisma/client';
 import { requireCurrentTenantId } from '@/lib/auth';
-import { assertValidUuid, withTenant } from '@/lib/db';
+import { assertValidUuid, withTenant, withTenantOrTx } from '@/lib/db';
 import {
   INTERACTION_CATEGORY_LABELS,
   INTERACTION_KIND_LABELS,
@@ -32,18 +33,17 @@ export type MergedTimelineItem = {
  */
 export async function buildHouseholdTimeline(
   householdId: string,
+  tx?: Prisma.TransactionClient,
 ): Promise<MergedTimelineItem[]> {
   assertValidUuid(householdId, 'householdId');
-  const tenantId = await requireCurrentTenantId();
-
-  return withTenant(tenantId, async (tx) => {
+  return withTenantOrTx(tx, requireCurrentTenantId, async (client) => {
     const [interactions, services] = await Promise.all([
-      tx.interactionNote.findMany({
+      client.interactionNote.findMany({
         where: { householdId, deletedAt: null },
         orderBy: { occurredAt: 'desc' },
         take: 300,
       }),
-      tx.memorialService.findMany({
+      client.memorialService.findMany({
         where: { householdId },
         orderBy: { scheduledAt: 'desc' },
         take: 300,

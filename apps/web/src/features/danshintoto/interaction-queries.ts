@@ -1,7 +1,7 @@
 import 'server-only';
-import type { InteractionNote } from '@prisma/client';
+import type { InteractionNote, Prisma } from '@prisma/client';
 import { requireCurrentTenantId } from '@/lib/auth';
-import { assertValidUuid, withTenant } from '@/lib/db';
+import { assertValidUuid, withTenant, withTenantOrTx } from '@/lib/db';
 
 export type InteractionNoteWithAuthor = InteractionNote & {
   /** 記録者の表示名。authorId が未設定/解決不能なら null。 */
@@ -38,12 +38,11 @@ function resolveAuthorName(
  */
 export async function listInteractionNotesByHousehold(
   householdId: string,
+  tx?: Prisma.TransactionClient,
 ): Promise<InteractionNoteWithAuthor[]> {
   assertValidUuid(householdId, 'householdId');
-  const tenantId = await requireCurrentTenantId();
-
-  return withTenant(tenantId, async (tx) => {
-    const notes = await tx.interactionNote.findMany({
+  return withTenantOrTx(tx, requireCurrentTenantId, async (client) => {
+    const notes = await client.interactionNote.findMany({
       where: { householdId, deletedAt: null },
       orderBy: [
         { isPinned: 'desc' },
@@ -63,7 +62,7 @@ export async function listInteractionNotesByHousehold(
 
     const authors =
       authorIds.length > 0
-        ? await tx.user.findMany({
+        ? await client.user.findMany({
             where: { id: { in: authorIds } },
             select: { id: true, displayName: true },
           })

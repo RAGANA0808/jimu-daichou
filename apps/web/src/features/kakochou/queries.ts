@@ -2,7 +2,7 @@ import 'server-only';
 import { Prisma } from '@prisma/client';
 import type { DeathLedgerEntry, Person } from '@prisma/client';
 import { requireCurrentTenantId } from '@/lib/auth';
-import { assertValidUuid, withTenant } from '@/lib/db';
+import { assertValidUuid, withTenant, withTenantOrTx } from '@/lib/db';
 import { deathDateSortKey } from '@/lib/kakochou';
 import { normalizeKana } from '@/lib/search';
 
@@ -41,12 +41,11 @@ const CROSS_LIST_INCLUDE = {
  */
 export async function listDeathLedgerEntriesByHousehold(
   householdId: string,
+  tx?: Prisma.TransactionClient,
 ): Promise<DeathLedgerEntryWithPerson[]> {
   assertValidUuid(householdId, 'householdId');
-  const tenantId = await requireCurrentTenantId();
-
-  return withTenant(tenantId, (tx) =>
-    tx.deathLedgerEntry.findMany({
+  return withTenantOrTx(tx, requireCurrentTenantId, (t) =>
+    t.deathLedgerEntry.findMany({
       where: {
         deletedAt: null,
         person: { householdId },

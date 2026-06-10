@@ -45,7 +45,8 @@ import { listContactPointsByHousehold } from '@/features/danshintoto/contact-poi
 import { ContactPointEditor } from '@/features/danshintoto/ContactPointEditor';
 import { listSuccessionsByHousehold } from '@/features/danshintoto/succession-queries';
 import { SuccessionSection } from '@/features/danshintoto/SuccessionSection';
-import { can, getCurrentRole } from '@/lib/auth';
+import { can, requireCapability } from '@/lib/auth';
+import { withTenant } from '@/lib/db';
 import { DocumentSection } from '@/features/documents/DocumentSection';
 import { listDocumentsByHousehold } from '@/features/documents/queries';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui';
@@ -98,55 +99,97 @@ export default async function HouseholdDetailPage({
   const { id } = await params;
   const sp = await searchParams;
   const activeTab = resolveTab(sp.tab);
-  const household = await getHouseholdById(id);
-  if (!household) {
+
+  // 接続プール枯渇 (問題A) 根治: カルテ詳細の全クエリを単一 withTenant トランザクションに
+  // 集約し、コネクション占有を 1 本に抑える (Supabase pooler 上限 15 に対する同時アクセス耐性)。
+  // 各クエリ関数は tx を渡して同一トランザクションに相乗りする (withTenantOrTx)。認可はここで
+  // requireCapability('read') を 1 回だけ行い、tx 経路の各クエリは認可を重複させない。
+  // Prisma 対話 tx は単一コネクション上で直列実行されるため、Promise.all でも実質順次となる。
+  const user = await requireCapability('read');
+  const snapshot = await withTenant(user.tenantId, async (tx) => {
+    const household = await getHouseholdById(id, tx);
+    if (!household) return null;
+    const [
+      deathLedgerEntries,
+      memorialServices,
+      familyMembers,
+      gravePlots,
+      householdBurials,
+      transactions,
+      interactionNotes,
+      feePlan,
+      feeInvoices,
+      assignedTags,
+      allTags,
+      contactPoints,
+      successions,
+      documents,
+      timelineItems,
+      sectDefaultCutoff,
+    ] = await Promise.all([
+      listDeathLedgerEntriesByHousehold(household.id, tx),
+      listMemorialServicesByHousehold(household.id, tx),
+      listLivingMembersByHousehold(household.id, tx),
+      listGravePlotsByHousehold(household.id, tx),
+      listBurialsByHousehold(household.id, tx),
+      listTransactionsByHousehold(household.id, tx),
+      listInteractionNotesByHousehold(household.id, tx),
+      getFeePlanByHousehold(household.id, tx),
+      listInvoicesByHousehold(household.id, tx),
+      listHouseholdTags(household.id, tx),
+      listTags(tx),
+      listContactPointsByHousehold(household.id, tx),
+      listSuccessionsByHousehold(household.id, tx),
+      listDocumentsByHousehold(household.id, tx),
+      buildHouseholdTimeline(household.id, tx),
+      getCurrentTenantSectDefaultCutoff(tx),
+    ]);
+    return {
+      household,
+      deathLedgerEntries,
+      memorialServices,
+      familyMembers,
+      gravePlots,
+      householdBurials,
+      transactions,
+      interactionNotes,
+      feePlan,
+      feeInvoices,
+      assignedTags,
+      allTags,
+      contactPoints,
+      successions,
+      documents,
+      timelineItems,
+      sectDefaultCutoff,
+    };
+  });
+
+  if (!snapshot) {
     notFound();
   }
-  // 接続プール枯渇 (問題A) 対策: このカルテ詳細は多数の世帯別クエリを引く。
-  // 各クエリは withTenant=1 トランザクション=1 コネクションを占有するため、全件を
-  // 一度に Promise.all すると Supabase pooler の上限 (15) を超えて EMAXCONNSESSION で
-  // 落ちうる。一度に張るコネクションを抑えるため 6 本ずつのバッチに分けて取得する
-  // (順序は無関係な読み取りのみ)。根治策の「単一 withTenant への集約」は将来対応。
-  const [
+  const {
+    household,
     deathLedgerEntries,
     memorialServices,
     familyMembers,
     gravePlots,
     householdBurials,
     transactions,
-  ] = await Promise.all([
-    listDeathLedgerEntriesByHousehold(household.id),
-    listMemorialServicesByHousehold(household.id),
-    listLivingMembersByHousehold(household.id),
-    listGravePlotsByHousehold(household.id),
-    listBurialsByHousehold(household.id),
-    listTransactionsByHousehold(household.id),
-  ]);
-  const [
     interactionNotes,
     feePlan,
     feeInvoices,
     assignedTags,
     allTags,
     contactPoints,
-  ] = await Promise.all([
-    listInteractionNotesByHousehold(household.id),
-    getFeePlanByHousehold(household.id),
-    listInvoicesByHousehold(household.id),
-    listHouseholdTags(household.id),
-    listTags(),
-    listContactPointsByHousehold(household.id),
-  ]);
-  const [successions, documents, timelineItems, sectDefaultCutoff] =
-    await Promise.all([
-      listSuccessionsByHousehold(household.id),
-      listDocumentsByHousehold(household.id),
-      buildHouseholdTimeline(household.id),
-      getCurrentTenantSectDefaultCutoff(),
-    ]);
+    successions,
+    documents,
+    timelineItems,
+    sectDefaultCutoff,
+  } = snapshot;
 
   // UI 補助: 役割で操作ボタンの出し分けをする (サーバ側 requireCapability が本丸)。
-  const role = await getCurrentRole();
+  const role = user.role;
   const canManageSuccession = role !== null && can(role, 'destructive');
   const canCreateSuccession = role !== null && can(role, 'create');
   const canEditDocs = role !== null && can(role, 'create');

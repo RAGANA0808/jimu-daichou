@@ -93,7 +93,7 @@
 
 ### D. その他
 - **`pnpm lint` は実行不能**（ESLint未設定・`next lint` が対話プロンプトで落ちる）。品質ゲートから除外中。ESLint設定の新規作成はリポジトリ全体影響の別タスク。
-- ~~**`pnpm build` 完走しない**~~ → ✅ **2026-06-09 解消 (PR #18)**。原因は3点: ① `.env` の `NODE_ENV=development` がビルドに漏れ本番ビルドが開発ランタイムで prerender されていた (→ build 時のみ `cross-env NODE_ENV=production` 強制) ② Next 15.0.0 の prerender バグ (→ **next/eslint-config-next を 15.5.19** へ更新) ③ 認証後 `(main)` の不要な静的化 (→ `force-dynamic`)。付随で `global-error.tsx` 追加・`next.config` を 15.5 仕様に。**`pnpm build` は exit 0 で完走 (全ルート ƒ Dynamic)**。**今後は品質ゲートに `pnpm build` を含めてよい**。
+- ~~**`pnpm build` 完走しない**~~ → ✅ **2026-06-09 解消 (PR #18)**。原因は3点: ① `.env` の `NODE_ENV=development` がビルドに漏れ本番ビルドが開発ランタイムで prerender されていた (→ build 時のみ `cross-env NODE_ENV=production` 強制) ② Next 15.0.0 の prerender バグ (→ **next/eslint-config-next を 15.5.19** へ更新) ③ 認証後 `(main)` の不要な静的化 (→ `force-dynamic`)。付随で `global-error.tsx` 追加・`next.config` を 15.5 仕様に。**`pnpm build` は exit 0 で完走 (全ルート ƒ Dynamic)**。**今後は品質ゲートに `pnpm build` を含めてよい**。**本番デプロイ手順は `docs/deploy/vercel.md`**（必要 env 一覧・**Vercel の Build Command は `next build` に上書き必須**=ローカルの dotenv `.env` 依存を回避・Supabase migration・OAuth redirect）。実デプロイは Vercel/Google/Supabase アカウント操作（外向き）が要るためユーザーと実施。
 - **`APP_ENCRYPTION_KEY`（任意）**: `.env` に `openssl rand -base64 32` の値を入れると以降の refresh_token が暗号化される（未設定でも平文後方互換で動作）。
 - **未コミット変更が多数**（前回確認時 ~198ファイル、現在 ~230+）。コミットはユーザー指示時のみ。
 - **PAPERLESS-MOBILE レビュー由来の low 指摘（要否判断のうえ対応）**:

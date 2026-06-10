@@ -1,7 +1,7 @@
 import 'server-only';
-import type { Person } from '@prisma/client';
+import type { Person, Prisma } from '@prisma/client';
 import { requireCurrentTenantId } from '@/lib/auth';
-import { assertValidUuid, withTenant } from '@/lib/db';
+import { assertValidUuid, withTenant, withTenantOrTx } from '@/lib/db';
 
 /**
  * 指定世帯の生存している家族構成員を一覧取得 (isDeceased=false)。
@@ -10,12 +10,11 @@ import { assertValidUuid, withTenant } from '@/lib/db';
  */
 export async function listLivingMembersByHousehold(
   householdId: string,
+  tx?: Prisma.TransactionClient,
 ): Promise<Person[]> {
   assertValidUuid(householdId, 'householdId');
-  const tenantId = await requireCurrentTenantId();
-
-  return withTenant(tenantId, (tx) =>
-    tx.person.findMany({
+  return withTenantOrTx(tx, requireCurrentTenantId, (t) =>
+    t.person.findMany({
       where: { householdId, isDeceased: false },
       orderBy: [
         { familyRelation: { sort: 'asc', nulls: 'last' } },

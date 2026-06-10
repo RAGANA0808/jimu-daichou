@@ -4,9 +4,10 @@ import type {
   InvoiceStatus,
   MaintenanceFeeInvoice,
   MaintenanceFeePlan,
+  Prisma,
 } from '@prisma/client';
 import { requireCurrentTenantId } from '@/lib/auth';
-import { assertValidUuid, withTenant } from '@/lib/db';
+import { assertValidUuid, withTenant, withTenantOrTx } from '@/lib/db';
 import {
   summarizeFiscalYear,
   type FiscalYearSummary,
@@ -51,11 +52,11 @@ export async function listFeePlans(): Promise<FeePlanWithHousehold[]> {
 /** 指定世帯の会費台帳 (1 世帯 1 件。なければ null)。 */
 export async function getFeePlanByHousehold(
   householdId: string,
+  tx?: Prisma.TransactionClient,
 ): Promise<MaintenanceFeePlan | null> {
   assertValidUuid(householdId, 'householdId');
-  const tenantId = await requireCurrentTenantId();
-  return withTenant(tenantId, (tx) =>
-    tx.maintenanceFeePlan.findUnique({ where: { householdId } }),
+  return withTenantOrTx(tx, requireCurrentTenantId, (t) =>
+    t.maintenanceFeePlan.findUnique({ where: { householdId } }),
   );
 }
 
@@ -157,11 +158,11 @@ export async function getFiscalYearSummaryOnly(
 /** 指定世帯の請求履歴 (年度降順)。カルテで当年の請求・入金状況を見るのに使う。 */
 export async function listInvoicesByHousehold(
   householdId: string,
+  tx?: Prisma.TransactionClient,
 ): Promise<MaintenanceFeeInvoice[]> {
   assertValidUuid(householdId, 'householdId');
-  const tenantId = await requireCurrentTenantId();
-  return withTenant(tenantId, (tx) =>
-    tx.maintenanceFeeInvoice.findMany({
+  return withTenantOrTx(tx, requireCurrentTenantId, (t) =>
+    t.maintenanceFeeInvoice.findMany({
       where: { householdId },
       orderBy: [{ fiscalYear: 'desc' }],
       take: 200,

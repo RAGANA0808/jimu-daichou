@@ -3,9 +3,10 @@ import type {
   DateOfDeathPrecision,
   GravePlotStatus,
   GravePlotType,
+  Prisma,
 } from '@prisma/client';
 import { requireCurrentTenantId } from '@/lib/auth';
-import { assertValidUuid, withTenant } from '@/lib/db';
+import { assertValidUuid, withTenant, withTenantOrTx } from '@/lib/db';
 
 /** 区画詳細「納骨されている故人」一覧の 1 行。 */
 export type BurialWithPerson = {
@@ -106,11 +107,11 @@ export async function listBurialsByPlot(
  */
 export async function listBurialsByHousehold(
   householdId: string,
+  tx?: Prisma.TransactionClient,
 ): Promise<HouseholdBurial[]> {
   assertValidUuid(householdId, 'householdId');
-  const tenantId = await requireCurrentTenantId();
-  const rows = await withTenant(tenantId, (tx) =>
-    tx.burial.findMany({
+  const rows = await withTenantOrTx(tx, requireCurrentTenantId, (t) =>
+    t.burial.findMany({
       where: { deletedAt: null, person: { householdId } },
       include: {
         gravePlot: {

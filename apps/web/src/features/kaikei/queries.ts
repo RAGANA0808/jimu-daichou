@@ -1,12 +1,13 @@
 import 'server-only';
 import type {
   Household,
+  Prisma,
   Transaction,
   TransactionCategory,
   TransactionDirection,
 } from '@prisma/client';
 import { requireCurrentTenantId } from '@/lib/auth';
-import { assertValidUuid, withTenant } from '@/lib/db';
+import { assertValidUuid, withTenant, withTenantOrTx } from '@/lib/db';
 import {
   aggregateCrossTab,
   fiscalYearRangeUtc,
@@ -79,11 +80,11 @@ export async function listTransactionsByMonth(
  */
 export async function listTransactionsByHousehold(
   householdId: string,
+  tx?: Prisma.TransactionClient,
 ): Promise<TransactionWithHousehold[]> {
   assertValidUuid(householdId, 'householdId');
-  const tenantId = await requireCurrentTenantId();
-  return withTenant(tenantId, (tx) =>
-    tx.transaction.findMany({
+  return withTenantOrTx(tx, requireCurrentTenantId, (t) =>
+    t.transaction.findMany({
       where: { householdId },
       include: {
         household: {

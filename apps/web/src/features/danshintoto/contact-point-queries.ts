@@ -1,7 +1,7 @@
 import 'server-only';
-import type { ContactPoint } from '@prisma/client';
+import type { ContactPoint, Prisma } from '@prisma/client';
 import { requireCurrentTenantId } from '@/lib/auth';
-import { assertValidUuid, withTenant } from '@/lib/db';
+import { assertValidUuid, withTenant, withTenantOrTx } from '@/lib/db';
 
 /**
  * 指定世帯の連絡先 (ContactPoint) を表示順で取得する。
@@ -11,12 +11,11 @@ import { assertValidUuid, withTenant } from '@/lib/db';
  */
 export async function listContactPointsByHousehold(
   householdId: string,
+  tx?: Prisma.TransactionClient,
 ): Promise<ContactPoint[]> {
   assertValidUuid(householdId, 'householdId');
-  const tenantId = await requireCurrentTenantId();
-
-  return withTenant(tenantId, (tx) =>
-    tx.contactPoint.findMany({
+  return withTenantOrTx(tx, requireCurrentTenantId, (t) =>
+    t.contactPoint.findMany({
       where: { householdId, deletedAt: null },
       orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
     }),

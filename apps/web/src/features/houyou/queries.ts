@@ -1,7 +1,7 @@
 import 'server-only';
-import type { Household, MemorialService } from '@prisma/client';
+import type { Household, MemorialService, Prisma } from '@prisma/client';
 import { requireCurrentTenantId } from '@/lib/auth';
-import { assertValidUuid, withTenant } from '@/lib/db';
+import { assertValidUuid, withTenant, withTenantOrTx } from '@/lib/db';
 
 export type MemorialServiceWithHousehold = MemorialService & {
   household: Pick<Household, 'id' | 'householderName' | 'nameKana'>;
@@ -43,11 +43,11 @@ export async function listUpcomingMemorialServices(): Promise<
  */
 export async function listMemorialServicesByHousehold(
   householdId: string,
+  tx?: Prisma.TransactionClient,
 ): Promise<MemorialServiceWithHousehold[]> {
   assertValidUuid(householdId, 'householdId');
-  const tenantId = await requireCurrentTenantId();
-  return withTenant(tenantId, (tx) =>
-    tx.memorialService.findMany({
+  return withTenantOrTx(tx, requireCurrentTenantId, (t) =>
+    t.memorialService.findMany({
       where: { householdId },
       include: {
         household: {

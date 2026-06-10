@@ -1,7 +1,7 @@
 import 'server-only';
-import type { Household, Tag } from '@prisma/client';
+import type { Household, Prisma, Tag } from '@prisma/client';
 import { requireCurrentTenantId } from '@/lib/auth';
-import { assertValidUuid, isValidUuid, withTenant } from '@/lib/db';
+import { assertValidUuid, isValidUuid, withTenant, withTenantOrTx } from '@/lib/db';
 
 export type HouseholdTagFilter = {
   tagIds: string[];
@@ -13,10 +13,9 @@ export type HouseholdWithTags = Household & { tags: Tag[] };
 /**
  * 自テナントのタグマスタ一覧。名前昇順 (候補・絞り込みチップ用)。
  */
-export async function listTags(): Promise<Tag[]> {
-  const tenantId = await requireCurrentTenantId();
-  return withTenant(tenantId, (tx) =>
-    tx.tag.findMany({
+export async function listTags(tx?: Prisma.TransactionClient): Promise<Tag[]> {
+  return withTenantOrTx(tx, requireCurrentTenantId, (t) =>
+    t.tag.findMany({
       orderBy: [{ name: 'asc' }],
     }),
   );
@@ -25,11 +24,13 @@ export async function listTags(): Promise<Tag[]> {
 /**
  * 指定世帯に付与済みのタグ一覧 (名前昇順)。
  */
-export async function listHouseholdTags(householdId: string): Promise<Tag[]> {
+export async function listHouseholdTags(
+  householdId: string,
+  tx?: Prisma.TransactionClient,
+): Promise<Tag[]> {
   assertValidUuid(householdId, 'householdId');
-  const tenantId = await requireCurrentTenantId();
-  const rows = await withTenant(tenantId, (tx) =>
-    tx.householdTag.findMany({
+  const rows = await withTenantOrTx(tx, requireCurrentTenantId, (t) =>
+    t.householdTag.findMany({
       where: { householdId },
       include: { tag: true },
       orderBy: { tag: { name: 'asc' } },

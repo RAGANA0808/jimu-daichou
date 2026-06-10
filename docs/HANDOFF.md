@@ -1,6 +1,6 @@
 # 寺務台帳 SaaS — 引き継ぎメモ & 次にやること設計書
 
-最終更新: 2026-06-09
+最終更新: 2026-06-10
 対象セッション後継者（新セッションの自分／別エージェント）向け。**まずこの1枚を読めば現在地と次の一手が分かる**ことを目的とする。
 
 ---
@@ -48,7 +48,8 @@
 - **PR #3**（`wave/analytics-trends`: ANALYTICS-LATER 経年トレンド分析）→ **MERGED**。
 - **PR #4**（`fix/karte-connection-pool`: 問題A 緩和=カルテ詳細のクエリをバッチ分割）→ **MERGED**。
 - **PR #5/#7/#10/#12**（docs 反映）/ **PR #6**（年忌「あと◯年」）/ **PR #8**（過去帳 戒名順ソート）/ **PR #9**（チャート a11y）/ **PR #11**（ダッシュボード「承継の承認待ち」）/ **PR #13**（「今後の法要」に来月プレビュー）/ **PR #14**（「直近の年忌」に来年の案内準備ナッジ）/ **PR #16**（dashboard クエリを3バッチに束ね同時接続抑制）/ **PR #18**（**本番ビルド修復: Next 15.5.19 + NODE_ENV + force-dynamic**）→ すべて **MERGED**（docs PR #15/#17 も）。
-- 現在 **main = `209fd50`**（PR #18 反映）。**Next は 15.5.19**（15.0.0 から更新）。`pnpm build` は exit 0 で完走するようになった。マージ済みブランチは local/remote とも削除済み・tree クリーン。
+- **PR #19/#20**（lint = ESLint flat config 整備）/ **PR #21**（対応履歴・連絡先の監査配線）/ **PR #22**（Vercel デプロイ手順書 `docs/deploy/vercel.md`）/ **PR #23**（**GitHub Actions CI = 品質ゲート自動化**）→ すべて **MERGED**。
+- 現在 **main = `cee2869`**（PR #23 反映）。**Next は 15.5.19**。`pnpm build` exit 0・`pnpm lint` 0/0・**CI green**（main push と PR で typecheck/test/lint/tenant-check/build を自動実行）。マージ済みブランチは local/remote とも掃除済み（2026-06-10 に stale 追跡参照 20 本を prune）・tree クリーン。
 - **「気づき」ビューはダッシュボード(`/dashboard`)が担う**（説明文「本日の気づきをまとめています」）。パネル: 今後の法要(**今月+来月** PR#13) / 未収(護持会費+墓地) / 直近の年忌(**+来年ナッジ** PR#14) / 合祀移行(=GraveContract 満了) / **承継の承認待ち**(PR#11) / 最近の対応履歴。新たな気づきは原則この既存コックピットへパネル追加で足す(別ページを作らない=重複回避)。
 - **dashboard のクエリは PR #16 で 3 バッチ(4/3/3)に束ね済み**（`getDashboardData`・peak 同時接続 ~4-5・dev cap 10/prod 15 に余裕）。今後の気づき追加も**いずれかのバッチに足す**（または 5本以上になるなら新バッチを足す）だけでよい。Prisma 対話 tx は単一接続で直列のため、単一 withTenant への完全集約は採らない(ランディングが遅くなる)＝バッチ化が速度と接続数の両立に優る。
 - **直 main への commit/push は auto classifier が却下する**（PR 経由必須）。docs 更新も小さなブランチ→PR→merge で通す。
@@ -92,7 +93,7 @@
 - **再開時**: 本当に必要なら **ユーザー承認を取ってから** 再作成・適用する。接続枯渇(A)が解決すれば `22P02` 自体の発生頻度は下がるため、優先度は中。
 
 ### D. その他
-- **`pnpm lint` は実行不能**（ESLint未設定・`next lint` が対話プロンプトで落ちる）。品質ゲートから除外中。ESLint設定の新規作成はリポジトリ全体影響の別タスク。
+- ~~**`pnpm lint` は実行不能**~~ → ✅ **2026-06-09 解消（PR #20）**。ESLint 9 flat config（`next/core-web-vitals` + `next/typescript`）を整備し `eslint . --max-warnings 0` で品質ゲート化（0 errors / 0 warnings）。**2026-06-10 に PR #23 で CI 化**（GitHub Actions・§1 参照）。
 - ~~**`pnpm build` 完走しない**~~ → ✅ **2026-06-09 解消 (PR #18)**。原因は3点: ① `.env` の `NODE_ENV=development` がビルドに漏れ本番ビルドが開発ランタイムで prerender されていた (→ build 時のみ `cross-env NODE_ENV=production` 強制) ② Next 15.0.0 の prerender バグ (→ **next/eslint-config-next を 15.5.19** へ更新) ③ 認証後 `(main)` の不要な静的化 (→ `force-dynamic`)。付随で `global-error.tsx` 追加・`next.config` を 15.5 仕様に。**`pnpm build` は exit 0 で完走 (全ルート ƒ Dynamic)**。**今後は品質ゲートに `pnpm build` を含めてよい**。**本番デプロイ手順は `docs/deploy/vercel.md`**（必要 env 一覧・**Vercel の Build Command は `next build` に上書き必須**=ローカルの dotenv `.env` 依存を回避・Supabase migration・OAuth redirect）。実デプロイは Vercel/Google/Supabase アカウント操作（外向き）が要るためユーザーと実施。
 - **`APP_ENCRYPTION_KEY`（任意）**: `.env` に `openssl rand -base64 32` の値を入れると以降の refresh_token が暗号化される（未設定でも平文後方互換で動作）。
 - **未コミット変更が多数**（前回確認時 ~198ファイル、現在 ~230+）。コミットはユーザー指示時のみ。
@@ -141,7 +142,7 @@
 6. `db:generate` が EPERM（DLL ロック）で落ちたら**dev サーバーを止めてから**再実行。
 
 ### 品質ゲート（緑を維持）
-- `pnpm typecheck` / `pnpm test` / `pnpm tenant-check`。`pnpm lint` は除外（前述D）。
+- `pnpm typecheck` / `pnpm test` / `pnpm lint` / `pnpm tenant-check`（**`pnpm lint` は PR #20 で復活**）。**これらは PR #23 で GitHub Actions CI 化**済み（`.github/workflows/ci.yml`・main push / PR で自動実行・`next build` も含む。Prisma datasource はダミー env 注入で実 DB 非接続）。
 - **`pnpm build` も PR #18 以降 exit 0 で完走する**（本番デプロイ前・大きめ変更時は走らせる。Radix/動的ページ追加で再発したら force-dynamic / NODE_ENV を疑う）。`pnpm build` は dev サーバ停止後に実行（`.next` 競合回避）。
 - **加えて今後は**: 主要導線の Playwright/chrome-devtools 実機 click-through（問題B）。
 

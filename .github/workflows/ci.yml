@@ -1,0 +1,90 @@
+# CI — 品質ゲート (寺務台帳)
+#
+# 目的:
+#   main への push / main 向け Pull Request のたびに、ローカルで守っている品質ゲート
+#   (typecheck / test / lint / tenant-check / build) を CI でも自動実行し、緑を維持する。
+#   レビュー前に機械的な退行 (型崩れ・テスト失敗・テナント境界違反・ビルド不能) を弾く。
+#
+# 設計メモ:
+#   - 単一ジョブで直列実行。build は最後に置く (落ちても前段の結果がステップ単位で残る)。
+#   - Prisma の datasource (env("DATABASE_URL") / env("DIRECT_URL")) と `prisma generate`
+#     は変数の「存在」を要求するため、ダミー値を注入する。CI は実 DB に接続しない:
+#       * typecheck / test (vitest unit) / lint は DB クエリを発行しない
+#       * build は全ルート force-dynamic のため、prerender 中に実クエリを走らせない
+#       * Supabase / Google の env は getter 関数で遅延評価され、build 時には評価されない
+#   - 実 DB を使う統合テスト (test:integration / dotenv 依存) は CI 対象外。
+#   - 本番ビルドの実環境検証は Vercel の Preview デプロイが担う (docs/deploy/vercel.md)。
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# 同一参照で新しい push があれば実行中の古い CI をキャンセルし、待ち時間と無駄を減らす。
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: 品質ゲート
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    # Prisma generate / typecheck が datasource 変数の存在を要求するためのダミー。
+    # 実接続はしない (ホスト localhost・誰も listen していない)。
+    env:
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci?schema=public
+      DIRECT_URL: postgresql://ci:ci@localhost:5432/ci?schema=public
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma Client
+        run: pnpm db:generate
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test (vitest unit)
+        run: pnpm test
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Tenant boundary check
+        run: pnpm tenant-check
+
+      # 本番ビルドが通ること自体を検証する。実 env は不要 (ダミーで足りる):
+      # 全ルート force-dynamic + env は getter 遅延評価のため、prerender 中に
+      # シークレットを使う実処理は走らない。dotenv 依存の package build を避け、
+      # apps/web で next build を直接呼ぶ (CI には ../../.env が無いため)。
+      - name: Production build (next build, ダミー env)
+        working-directory: apps/web
+        env:
+          NODE_ENV: production
+          NEXT_PUBLIC_SUPABASE_URL: https://ci-dummy.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-dummy-anon-key
+          SUPABASE_SERVICE_ROLE_KEY: ci-dummy-service-role-key
+          NEXT_PUBLIC_APP_URL: http://localhost:3104
+          GOOGLE_CLIENT_ID: ci-dummy-client-id
+          GOOGLE_CLIENT_SECRET: ci-dummy-client-secret
+        run: pnpm exec next build

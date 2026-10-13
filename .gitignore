@@ -59,3 +59,19 @@ coverage/
 **/import-data/
 *.dump
 *.sql.gz
+
+# Secrets: env backups and key files (security audit 2026-10, A09)
+.env*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+credentials*.json
+token*.json
+client_secret*.json
+service-account*.json
+id_rsa*
+id_ed25519*
+secrets/
+.secrets/
